@@ -67,10 +67,21 @@ public class MainActivity extends Activity {
     private static final int BLUE = Color.rgb(0, 103, 255);
     private static final int SKY = Color.rgb(14, 165, 233);
     private static final int TEAL = Color.rgb(0, 125, 115);
+    private static final int APP_MINT = Color.rgb(218, 247, 242);
+    private static final int APP_ICE = Color.rgb(226, 241, 251);
+    private static final int CASH_MINT = Color.rgb(0, 171, 158);
+    private static final int CASH_BLUE = Color.rgb(24, 112, 210);
     private static final int GREEN = Color.rgb(22, 163, 74);
     private static final int CORAL = Color.rgb(229, 72, 77);
     private static final int GOLD = Color.rgb(183, 129, 34);
     private static final int PURPLE = Color.rgb(124, 58, 237);
+    private static final String SOURCE_TRANSFER_FEE = "transfer_fee";
+    private static final String SOURCE_TRANSFER_OUT = "transfer_out";
+    private static final String SOURCE_TRANSFER_IN = "transfer_in";
+    private static final String SOURCE_INVESTMENT_OPEN = "investment_open";
+    private static final String SOURCE_INVESTMENT_ADD = "investment_add";
+    private static final String SOURCE_INVESTMENT_GAIN = "investment_gain";
+    private static final String SOURCE_INVESTMENT_MATURITY = "investment_maturity";
     private static final String[] TABS = {
             "⌂ Home", "↕ Entries", "▦ Budgets", "↗ Investments",
             "▣ Balances", "◎ Goals", "⇄ Transfers", "✚ Categories"
@@ -318,7 +329,7 @@ public class MainActivity extends Activity {
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setPadding(0, dp(8), 0, dp(8));
-        shell.setBackground(round(Color.argb(236, 252, 254, 255), dp(22), Color.rgb(218, 231, 236)));
+        shell.setBackground(round(Color.argb(238, 250, 255, 254), dp(22), Color.rgb(187, 219, 224)));
         shell.setElevation(dp(10));
         root.addView(shell, matchWrapWithMargins(0, dp(8), 0, dp(10)));
 
@@ -680,7 +691,9 @@ public class MainActivity extends Activity {
         addSectionTitle("Budgets This Month");
         List<BudgetProgress> budgets = db.budgetProgress(selectedCountryId, monthToday());
         if (budgets.isEmpty()) {
-            content.addView(cardWith(emptyText("No budget set for " + monthToday() + ".")));
+            LinearLayout emptyBudget = cardWith(emptyText("No budget set for " + monthToday() + "."));
+            makeCardNavigate(emptyBudget, 2);
+            content.addView(emptyBudget);
         } else {
             HorizontalScrollView scroll = new HorizontalScrollView(this);
             scroll.setHorizontalScrollBarEnabled(false);
@@ -694,6 +707,7 @@ public class MainActivity extends Activity {
 
         addSectionTitle("Investments");
         LinearLayout investmentCard = card();
+        makeCardNavigate(investmentCard, 3);
         investmentCard.addView(text("Total invested till date", 15, Typeface.BOLD, INK));
         double[] invested = db.investedByType(selectedCountryId);
         investmentCard.addView(metricRow("🏦 Fixed Deposits", money(invested[0], country.currency), TEAL));
@@ -709,7 +723,9 @@ public class MainActivity extends Activity {
         addSectionTitle("Goals");
         List<Goal> goals = db.goals(selectedCountryId);
         if (goals.isEmpty()) {
-            content.addView(cardWith(emptyText("No goals yet.")));
+            LinearLayout emptyGoal = cardWith(emptyText("No goals yet."));
+            makeCardNavigate(emptyGoal, 5);
+            content.addView(emptyGoal);
         } else {
             for (Goal goal : goals) content.addView(goalCard(goal, country.currency, false));
         }
@@ -794,6 +810,16 @@ public class MainActivity extends Activity {
             card.addView(text("Maturity action: " + investment.maturityAction + " · Status: " + investment.status, 12, Typeface.NORMAL, MUTED));
             if (investment.notes.length() > 0) card.addView(text(investment.notes, 13, Typeface.NORMAL, INK));
             LinearLayout actions = horizontal();
+            if (!"Fixed Deposit".equals(investment.type)) {
+                Button addFunds = outlineButton("＋ Add funds");
+                addFunds.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        showAddInvestmentFundsDialog(investment);
+                    }
+                });
+                actions.addView(addFunds, smallActionParams());
+            }
             Button gain = outlineButton("＋ Capital gains");
             gain.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -819,7 +845,7 @@ public class MainActivity extends Activity {
                     confirmDelete("Delete this investment?", new Runnable() {
                         @Override
                         public void run() {
-                            db.deleteById("investments", investment.id);
+                            db.deleteInvestment(investment);
                             render();
                         }
                     });
@@ -917,25 +943,67 @@ public class MainActivity extends Activity {
             content.addView(cardWith(emptyText("No transfers yet.")));
             return;
         }
-        for (Transfer transfer : transfers) {
+        for (final Transfer transfer : transfers) {
             LinearLayout card = card();
             card.addView(text("⇄ " + transfer.fromCountry + " to " + transfer.toCountry, 17, Typeface.BOLD, INK));
-            card.addView(metricRow("Sent", money(transfer.fromAmount, transfer.fromCurrency), CORAL));
+            card.addView(metricRow("Expense from " + transfer.fromAccount, money(transfer.fromAmount, transfer.fromCurrency), CORAL));
             if (transfer.feeAmount > 0) card.addView(metricRow("Fee", money(transfer.feeAmount, transfer.fromCurrency), GOLD));
-            card.addView(metricRow("Received", money(transfer.toAmount, transfer.toCurrency), GREEN));
+            card.addView(metricRow("Income to " + transfer.toAccount, money(transfer.toAmount, transfer.toCurrency), GREEN));
             card.addView(text("Rate: " + oneFour(transfer.rate) + " · " + clean(transfer.rateSource, "Manual") + " · " + transfer.date, 12, Typeface.NORMAL, MUTED));
             if (transfer.notes.length() > 0) card.addView(text(transfer.notes, 13, Typeface.NORMAL, INK));
+            LinearLayout actions = horizontal();
+            Button edit = outlineButton("Edit");
+            edit.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    showTransferDialog(transfer);
+                }
+            });
+            actions.addView(edit, smallActionParams());
+            Button delete = outlineButton("Delete");
+            delete.setTextColor(CORAL);
+            delete.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    confirmDelete("Delete this transfer?", new Runnable() {
+                        @Override
+                        public void run() {
+                            db.deleteTransfer(transfer.id);
+                            render();
+                        }
+                    });
+                }
+            });
+            actions.addView(delete, smallActionParams());
+            card.addView(actions);
             content.addView(card);
         }
     }
 
     private void showCategories() {
-        addActionHeader("Categories & Icons", "＋ Add category", new View.OnClickListener() {
+        LinearLayout header = horizontal();
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.addView(text("Categories & Icons", 22, Typeface.BOLD, INK), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Button remove = outlineButton("Remove");
+        remove.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                showRemoveCategoryDialog();
+            }
+        });
+        header.addView(remove, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)));
+        Button add = primaryButton("＋ Add");
+        add.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 showCategoryDialog();
             }
         });
+        LinearLayout.LayoutParams addParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44));
+        addParams.setMargins(dp(8), 0, 0, 0);
+        header.addView(add, addParams);
+        content.addView(header, matchWrap());
+        content.addView(spacer(10));
 
         List<Category> categories = db.categories(selectedCountryId);
         LinearLayout split = horizontal();
@@ -1010,6 +1078,27 @@ public class MainActivity extends Activity {
             tile.addView(delete, matchWrapWithMargins(0, dp(6), 0, 0));
         }
         return tile;
+    }
+
+    private void showRemoveCategoryDialog() {
+        final List<Category> categories = db.categories(selectedCountryId);
+        if (categories.isEmpty()) {
+            toast("No categories to remove.");
+            return;
+        }
+        LinearLayout form = form();
+        final Spinner category = spinner(categoryRemoveLabels(categories));
+        addDialogHero(form, "✚", "Remove category", "Remove it from category choices without changing old entries.", CORAL);
+        form.addView(dialogSection("Category", category));
+        showStyledDialog(form, "Cancel", "Remove", CORAL, null, new DialogSubmit() {
+            @Override
+            public boolean submit() {
+                Category selected = categories.get(category.getSelectedItemPosition());
+                db.removeCategory(selectedCountryId, selected);
+                render();
+                return true;
+            }
+        });
     }
 
     private LinearLayout accountBalanceCard(final Country country) {
@@ -1337,7 +1426,6 @@ public class MainActivity extends Activity {
         final EditText title = input("Title", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         final Spinner account = spinner(accountNames(accounts));
         final EditText principal = input("Principal amount in " + currencySymbol(country.currency), "", decimalInput());
-        final EditText present = input("Present value", "", decimalInput());
         final EditText start = dateInput("Date of opening", today(), false);
         final EditText maturity = dateInput("Date of maturity", "", true);
         final EditText maturityValue = input("Value at maturity", "", decimalInput());
@@ -1347,7 +1435,7 @@ public class MainActivity extends Activity {
         addDialogHero(form, "↗", "Add investment", "Track principal, maturity and how money should return.", PURPLE);
         form.addView(label("Investment type"));
         form.addView(type);
-        form.addView(dialogSection("Investment details", title, dialogFieldRow(principal, present)));
+        form.addView(dialogSection("Investment details", title, principal));
         form.addView(label("Linked account"));
         form.addView(account);
         form.addView(dialogSection("Dates and maturity", dialogFieldRow(start, maturity), maturityValue));
@@ -1355,7 +1443,8 @@ public class MainActivity extends Activity {
         form.addView(maturityAction);
         form.addView(notes);
 
-        showStyledDialog(form, "Cancel", "Save", PURPLE, null, new DialogSubmit() {
+        final AlertDialog[] dialogHolder = new AlertDialog[1];
+        dialogHolder[0] = showStyledDialog(form, "Cancel", "Save", PURPLE, null, new DialogSubmit() {
             @Override
             public boolean submit() {
                 double principalValue = parseDouble(principal.getText().toString());
@@ -1363,17 +1452,31 @@ public class MainActivity extends Activity {
                     toast("Enter a title and principal amount.");
                     return false;
                 }
-                long accountId = accounts.get(account.getSelectedItemPosition()).id;
-                double presentValue = parseDouble(present.getText().toString());
-                if (presentValue <= 0) presentValue = principalValue;
+                final Account selectedAccount = accounts.get(account.getSelectedItemPosition());
+                final long accountId = selectedAccount.id;
+                final double presentValue = principalValue;
                 double maturityAmount = parseDouble(maturityValue.getText().toString());
                 if (maturityAmount <= 0) maturityAmount = presentValue;
-                db.addInvestment(selectedCountryId, type.getSelectedItem().toString(),
-                        clean(title.getText().toString(), "Investment"), accountId, principalValue, presentValue, maturityAmount,
-                        clean(start.getText().toString(), today()), maturity.getText().toString().trim(),
-                        maturityAction.getSelectedItem().toString(),
-                        notes.getText().toString().trim());
-                render();
+                final double finalMaturityAmount = maturityAmount;
+                final double finalPrincipalValue = principalValue;
+                final Runnable save = new Runnable() {
+                    @Override
+                    public void run() {
+                        db.addInvestment(selectedCountryId, type.getSelectedItem().toString(),
+                                clean(title.getText().toString(), "Investment"), accountId, finalPrincipalValue, presentValue, finalMaturityAmount,
+                                clean(start.getText().toString(), today()), maturity.getText().toString().trim(),
+                                maturityAction.getSelectedItem().toString(),
+                                notes.getText().toString().trim());
+                        if (dialogHolder[0] != null) dialogHolder[0].dismiss();
+                        render();
+                    }
+                };
+                if (needsInvestmentBalanceConfirmation(selectedAccount, finalPrincipalValue)) {
+                    showBalanceConfirmation("Confirm investment",
+                            investmentBalanceWarning(selectedAccount, finalPrincipalValue), PURPLE, save);
+                    return false;
+                }
+                save.run();
                 return true;
             }
         });
@@ -1397,14 +1500,60 @@ public class MainActivity extends Activity {
                     toast("Enter the present value.");
                     return false;
                 }
-                db.updateInvestmentValue(investment.id, newValue);
-                if (gain > 0) {
-                    db.addEntry(selectedCountryId, "Income", clean(date.getText().toString(), today()),
-                            investment.title + " capital gains", gain, "Investments", "", investment.accountId,
-                            "Auto-added from investment update", "", false, 0, "", 0, "", 0);
-                    toast("Capital gains added to income.");
-                }
+                db.updateInvestmentValueWithGain(investment, selectedCountryId, clean(date.getText().toString(), today()), newValue, gain);
+                if (gain > 0) toast("Capital gains added to income.");
                 render();
+                return true;
+            }
+        });
+    }
+
+    private void showAddInvestmentFundsDialog(final Investment investment) {
+        if ("Fixed Deposit".equals(investment.type)) {
+            toast("Additional principal is available for RDs and market linked funds.");
+            return;
+        }
+        final Account linkedAccount = db.account(investment.accountId);
+        if (linkedAccount.id == 0) {
+            toast("This investment needs a linked account.");
+            return;
+        }
+        LinearLayout form = form();
+        final EditText date = dateInput("Contribution date", today(), false);
+        final EditText amount = input("Additional principal", "", decimalInput());
+        final EditText maturityValue = input("Maturity value after adding (optional)", "", decimalInput());
+        final EditText notes = multiInput("Notes");
+        addDialogHero(form, "↗", "Add funds", "Increase principal and adjust the expected maturity value.", PURPLE);
+        form.addView(dialogSection(investment.type, dialogFieldRow(date, amount), maturityValue));
+        form.addView(notes);
+
+        final AlertDialog[] dialogHolder = new AlertDialog[1];
+        dialogHolder[0] = showStyledDialog(form, "Cancel", "Save", PURPLE, null, new DialogSubmit() {
+            @Override
+            public boolean submit() {
+                final double additional = parseDouble(amount.getText().toString());
+                if (additional <= 0) {
+                    toast("Enter the additional principal.");
+                    return false;
+                }
+                double nextMaturity = parseDouble(maturityValue.getText().toString());
+                if (nextMaturity <= 0) nextMaturity = investment.maturityValue + additional;
+                final double finalMaturity = nextMaturity;
+                final Runnable save = new Runnable() {
+                    @Override
+                    public void run() {
+                        db.addInvestmentFunds(investment, selectedCountryId, clean(date.getText().toString(), today()),
+                                additional, finalMaturity, notes.getText().toString().trim());
+                        if (dialogHolder[0] != null) dialogHolder[0].dismiss();
+                        render();
+                    }
+                };
+                if (needsInvestmentBalanceConfirmation(linkedAccount, additional)) {
+                    showBalanceConfirmation("Confirm added funds",
+                            investmentBalanceWarning(linkedAccount, additional), PURPLE, save);
+                    return false;
+                }
+                save.run();
                 return true;
             }
         });
@@ -1481,18 +1630,33 @@ public class MainActivity extends Activity {
         form.addView(label("Set aside in account"));
         form.addView(notes);
 
-        showStyledDialog(form, "Cancel", "Save", TEAL, null, new DialogSubmit() {
+        final AlertDialog[] dialogHolder = new AlertDialog[1];
+        dialogHolder[0] = showStyledDialog(form, "Cancel", "Save", TEAL, null, new DialogSubmit() {
             @Override
             public boolean submit() {
                 if (title.getText().toString().trim().length() == 0 || parseDouble(target.getText().toString()) <= 0) {
                     toast("Enter a title and target amount.");
                     return false;
                 }
-                Account selectedAccount = accounts.get(account.getSelectedItemPosition());
-                db.addGoal(selectedCountryId, title.getText().toString().trim(),
-                        parseDouble(target.getText().toString()), parseDouble(current.getText().toString()),
-                        date.getText().toString().trim(), selectedAccount.id, notes.getText().toString().trim());
-                render();
+                final Account selectedAccount = accounts.get(account.getSelectedItemPosition());
+                final double targetAmount = parseDouble(target.getText().toString());
+                final double currentAmount = parseDouble(current.getText().toString());
+                final Runnable save = new Runnable() {
+                    @Override
+                    public void run() {
+                        db.addGoal(selectedCountryId, title.getText().toString().trim(),
+                                targetAmount, currentAmount,
+                                date.getText().toString().trim(), selectedAccount.id, notes.getText().toString().trim());
+                        if (dialogHolder[0] != null) dialogHolder[0].dismiss();
+                        render();
+                    }
+                };
+                if (needsGoalBalanceConfirmation(selectedAccount, currentAmount, 0)) {
+                    showBalanceConfirmation("Confirm goal money",
+                            goalBalanceWarning(selectedAccount, currentAmount, 0), TEAL, save);
+                    return false;
+                }
+                save.run();
                 return true;
             }
         });
@@ -1508,15 +1672,35 @@ public class MainActivity extends Activity {
         if (goal.accountId == 0 && !accounts.isEmpty()) {
             form.addView(dialogSection("Set aside in account", account));
         }
-        showStyledDialog(form, "Cancel", "Apply", TEAL, null, new DialogSubmit() {
+        final AlertDialog[] dialogHolder = new AlertDialog[1];
+        dialogHolder[0] = showStyledDialog(form, "Cancel", "Apply", TEAL, null, new DialogSubmit() {
             @Override
             public boolean submit() {
-                        long accountId = goal.accountId;
-                        if (accountId == 0 && !accounts.isEmpty()) accountId = accounts.get(account.getSelectedItemPosition()).id;
-                        db.updateGoalCurrent(goal.id, goal.currentAmount + parseDouble(amount.getText().toString()), accountId);
+                final double nextAmount = goal.currentAmount + parseDouble(amount.getText().toString());
+                long accountId = goal.accountId;
+                if (accountId == 0 && !accounts.isEmpty()) accountId = accounts.get(account.getSelectedItemPosition()).id;
+                if (accountId == 0) {
+                    toast("Choose an account for this goal.");
+                    return false;
+                }
+                final long finalAccountId = accountId;
+                final Account selectedAccount = db.account(finalAccountId);
+                final Runnable save = new Runnable() {
+                    @Override
+                    public void run() {
+                        db.updateGoalCurrent(goal.id, nextAmount, finalAccountId);
+                        if (dialogHolder[0] != null) dialogHolder[0].dismiss();
                         render();
-                        return true;
                     }
+                };
+                if (needsGoalBalanceConfirmation(selectedAccount, nextAmount, goal.id)) {
+                    showBalanceConfirmation("Confirm goal money",
+                            goalBalanceWarning(selectedAccount, nextAmount, goal.id), TEAL, save);
+                    return false;
+                }
+                save.run();
+                return true;
+            }
         });
     }
 
@@ -1530,17 +1714,76 @@ public class MainActivity extends Activity {
         LinearLayout form = form();
         addDialogHero(form, "◎", "Set goal account", "Choose where this goal money is being held.", TEAL);
         form.addView(dialogSection("Account", account));
-        showStyledDialog(form, "Cancel", "Save", TEAL, null, new DialogSubmit() {
+        final AlertDialog[] dialogHolder = new AlertDialog[1];
+        dialogHolder[0] = showStyledDialog(form, "Cancel", "Save", TEAL, null, new DialogSubmit() {
             @Override
             public boolean submit() {
-                        db.updateGoalCurrent(goal.id, goal.currentAmount, accounts.get(account.getSelectedItemPosition()).id);
+                final Account selectedAccount = accounts.get(account.getSelectedItemPosition());
+                final Runnable save = new Runnable() {
+                    @Override
+                    public void run() {
+                        db.updateGoalCurrent(goal.id, goal.currentAmount, selectedAccount.id);
+                        if (dialogHolder[0] != null) dialogHolder[0].dismiss();
                         render();
-                        return true;
                     }
+                };
+                if (needsGoalBalanceConfirmation(selectedAccount, goal.currentAmount, goal.id)) {
+                    showBalanceConfirmation("Confirm goal money",
+                            goalBalanceWarning(selectedAccount, goal.currentAmount, goal.id), TEAL, save);
+                    return false;
+                }
+                save.run();
+                return true;
+            }
+        });
+    }
+
+    private boolean needsGoalBalanceConfirmation(Account account, double goalAmount, long excludingGoalId) {
+        if (account == null || account.id == 0 || goalAmount <= 0) return false;
+        double otherReserved = db.goalReservedForAccountExcept(account.id, excludingGoalId);
+        return otherReserved + goalAmount > account.balance;
+    }
+
+    private String goalBalanceWarning(Account account, double goalAmount, long excludingGoalId) {
+        double otherReserved = db.goalReservedForAccountExcept(account.id, excludingGoalId);
+        return "This will set aside " + money(goalAmount, account.currency) + " for this goal in " + account.name
+                + ". Other goals already use " + money(otherReserved, account.currency)
+                + ", while the account balance is " + money(account.balance, account.currency)
+                + ". Confirm if you still want to continue.";
+    }
+
+    private boolean needsInvestmentBalanceConfirmation(Account account, double amount) {
+        if (account == null || account.id == 0 || amount <= 0) return false;
+        return amount > availableForInvestment(account);
+    }
+
+    private String investmentBalanceWarning(Account account, double amount) {
+        return "This will deduct " + money(amount, account.currency) + " from " + account.name
+                + ". After goal reservations, available balance is " + money(availableForInvestment(account), account.currency)
+                + ". Confirm if you still want to continue.";
+    }
+
+    private double availableForInvestment(Account account) {
+        return account.balance - db.goalReservedForAccount(account.id);
+    }
+
+    private void showBalanceConfirmation(String title, String message, int accent, final Runnable action) {
+        LinearLayout form = form();
+        addDialogHero(form, "!", title, message, accent);
+        showStyledDialog(form, "Cancel", "Confirm", accent, null, new DialogSubmit() {
+            @Override
+            public boolean submit() {
+                action.run();
+                return true;
+            }
         });
     }
 
     private void showTransferDialog() {
+        showTransferDialog(null);
+    }
+
+    private void showTransferDialog(final Transfer existing) {
         final List<Country> countries = db.getCountries();
         if (countries.size() < 2) {
             toast("Add at least two currency accounts before recording transfers.");
@@ -1549,20 +1792,32 @@ public class MainActivity extends Activity {
         LinearLayout form = form();
         final Spinner fromCountry = spinner(countryNames(countries));
         final Spinner toCountry = spinner(countryNames(countries));
-        final Spinner fromAccount = spinner(accountNames(db.accounts(countries.get(0).id)));
-        final Spinner toAccount = spinner(accountNames(db.accounts(countries.size() > 1 ? countries.get(1).id : countries.get(0).id)));
-        if (countries.size() > 1) toCountry.setSelection(1);
-        final EditText date = dateInput("Transfer date", today(), false);
-        final EditText amount = input("Transfer amount", "", decimalInput());
-        final EditText fee = input("Transfer fee", "0", decimalInput());
+        if (existing != null) {
+            fromCountry.setSelection(countryIndex(countries, existing.fromCountryId));
+            toCountry.setSelection(countryIndex(countries, existing.toCountryId));
+        } else if (countries.size() > 1) {
+            toCountry.setSelection(1);
+        }
+        final Spinner fromAccount = spinner(accountNames(db.accounts(countries.get(fromCountry.getSelectedItemPosition()).id)));
+        final Spinner toAccount = spinner(accountNames(db.accounts(countries.get(toCountry.getSelectedItemPosition()).id)));
+        if (existing != null) {
+            setAccountSelection(fromAccount, db.accounts(existing.fromCountryId), existing.fromAccountId);
+            setAccountSelection(toAccount, db.accounts(existing.toCountryId), existing.toAccountId);
+        }
+        final EditText date = dateInput("Transfer date", existing == null ? today() : existing.date, false);
+        final EditText amount = input("Transfer amount", existing == null ? "" : moneyPlain(existing.fromAmount), decimalInput());
+        final EditText fee = input("Transfer fee", existing == null ? "0" : moneyPlain(existing.feeAmount), decimalInput());
         final Spinner feeMode = spinner(new String[]{"Fee exclusive (charged extra)", "Fee inclusive (deducted from transfer amount)"});
-        final EditText rate = input("Conversion rate", "", decimalInput());
+        final EditText rate = input("Conversion rate", existing == null ? "" : oneFour(existing.rate), decimalInput());
         final TextView converted = text("Converted amount will appear here.", 13, Typeface.BOLD, TEAL);
         final EditText notes = multiInput("Notes");
+        if (existing != null) notes.setText(existing.notes);
+        final boolean[] initializingTransfer = new boolean[]{existing != null};
 
         AdapterView.OnItemSelectedListener countryListener = new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
+                if (initializingTransfer[0]) return;
                 resetSpinner(fromAccount, accountNames(db.accounts(countries.get(fromCountry.getSelectedItemPosition()).id)));
                 resetSpinner(toAccount, accountNames(db.accounts(countries.get(toCountry.getSelectedItemPosition()).id)));
                 applyDailyRate(countries, fromCountry, toCountry, date, rate, amount, fee, feeMode, converted);
@@ -1574,6 +1829,20 @@ public class MainActivity extends Activity {
         };
         fromCountry.setOnItemSelectedListener(countryListener);
         toCountry.setOnItemSelectedListener(countryListener);
+        initializingTransfer[0] = false;
+        if (existing != null) {
+            fromCountry.post(new Runnable() {
+                @Override
+                public void run() {
+                    resetSpinner(fromAccount, accountNames(db.accounts(existing.fromCountryId)));
+                    resetSpinner(toAccount, accountNames(db.accounts(existing.toCountryId)));
+                    setAccountSelection(fromAccount, db.accounts(existing.fromCountryId), existing.fromAccountId);
+                    setAccountSelection(toAccount, db.accounts(existing.toCountryId), existing.toAccountId);
+                    rate.setText(oneFour(existing.rate));
+                    updateConverted(rate, amount, fee, feeMode, converted, existing.fromCurrency, existing.toCurrency);
+                }
+            });
+        }
         amount.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override
             public void onFocusChange(View view, boolean hasFocus) {
@@ -1610,9 +1879,13 @@ public class MainActivity extends Activity {
             public void onNothingSelected(AdapterView<?> adapterView) {
             }
         });
-        applyDailyRate(countries, fromCountry, toCountry, date, rate, amount, fee, feeMode, converted);
+        if (existing == null) applyDailyRate(countries, fromCountry, toCountry, date, rate, amount, fee, feeMode, converted);
+        else updateConverted(rate, amount, fee, feeMode, converted,
+                countries.get(fromCountry.getSelectedItemPosition()).currency,
+                countries.get(toCountry.getSelectedItemPosition()).currency);
 
-        addDialogHero(form, "⇄", "Send money", "Record the transfer, fee and conversion rate together.", SKY);
+        addDialogHero(form, "⇄", existing == null ? "Send money" : "Edit transfer",
+                "Record the transfer, fee and conversion rate together.", SKY);
         form.addView(dialogSection("From", fromCountry, fromAccount));
         form.addView(dialogSection("To", toCountry, toAccount));
         form.addView(dialogSection("Transfer details", date, dialogFieldRow(amount, fee), feeMode, rate));
@@ -1659,10 +1932,17 @@ public class MainActivity extends Activity {
                 Account source = fromAccounts.get(Math.min(fromAccount.getSelectedItemPosition(), fromAccounts.size() - 1));
                 Account destination = toAccounts.get(Math.min(toAccount.getSelectedItemPosition(), toAccounts.size() - 1));
                 double destinationAmount = transferAmount * rateValue;
-                db.addTransfer(clean(date.getText().toString(), today()), from.id, to.id,
-                        source.id, destination.id, transferAmount, destinationAmount, rateValue, feeValue,
-                        db.rateSource(from.currency, to.currency, clean(date.getText().toString(), today())),
-                        notes.getText().toString().trim());
+                if (existing == null) {
+                    db.addTransfer(clean(date.getText().toString(), today()), from.id, to.id,
+                            source.id, destination.id, transferAmount, destinationAmount, rateValue, feeValue,
+                            db.rateSource(from.currency, to.currency, clean(date.getText().toString(), today())),
+                            notes.getText().toString().trim());
+                } else {
+                    db.updateTransfer(existing.id, clean(date.getText().toString(), today()), from.id, to.id,
+                            source.id, destination.id, transferAmount, destinationAmount, rateValue, feeValue,
+                            db.rateSource(from.currency, to.currency, clean(date.getText().toString(), today())),
+                            notes.getText().toString().trim());
+                }
                 render();
                 return true;
             }
@@ -1907,8 +2187,9 @@ public class MainActivity extends Activity {
                     return false;
                 }
                 String iconValue = selectedCategoryIcon(icon, customIcon);
-                db.addCategory(selectedCountryId, name.getText().toString().trim(),
+                boolean created = db.addCategory(selectedCountryId, name.getText().toString().trim(),
                         iconValue, type.getSelectedItem().toString());
+                toast(created ? "Category saved." : "Category already exists.");
                 render();
                 return true;
             }
@@ -1933,8 +2214,9 @@ public class MainActivity extends Activity {
                     toast("Enter a category name.");
                     return false;
                 }
-                db.addCategory(selectedCountryId, name.getText().toString().trim(),
+                boolean created = db.addCategory(selectedCountryId, name.getText().toString().trim(),
                         selectedCategoryIcon(icon, customIcon), entryType);
+                if (!created) toast("Category already exists.");
                 afterSave.run();
                 return true;
             }
@@ -1996,8 +2278,7 @@ public class MainActivity extends Activity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(18), dp(18), dp(18), dp(18));
-        int accent = currencyColor(country);
-        card.setBackground(gradient(accent, blend(BLUE, PURPLE), dp(22)));
+        card.setBackground(gradient(cashFlowStart(country, summary[2]), cashFlowEnd(summary[2]), dp(22)));
         card.setElevation(dp(7));
         card.setLayoutParams(matchWrapWithMargins(0, 0, 0, dp(10)));
         View.OnClickListener openEntries = new View.OnClickListener() {
@@ -2028,6 +2309,18 @@ public class MainActivity extends Activity {
         row.addView(expense);
         card.addView(row);
         return card;
+    }
+
+    private void makeCardNavigate(View view, final int tab) {
+        view.setClickable(true);
+        view.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View clicked) {
+                selectedTab = tab;
+                showEntryArchive = false;
+                render();
+            }
+        });
     }
 
     private LinearLayout taxMarkedCard(Country country, String start, String end) {
@@ -2097,6 +2390,7 @@ public class MainActivity extends Activity {
         LinearLayout mini = new LinearLayout(this);
         mini.setOrientation(LinearLayout.VERTICAL);
         mini.setPadding(dp(14), dp(12), dp(14), dp(12));
+        makeCardNavigate(mini, 2);
         mini.setBackground(round(percent > 100 ? Color.rgb(255, 244, 243) : PAPER,
                 dp(8), percent > 100 ? Color.rgb(255, 204, 200) : LINE));
         mini.setElevation(dp(4));
@@ -2506,23 +2800,25 @@ public class MainActivity extends Activity {
             });
             icons.addView(bill, smallActionParams());
         }
-        Button delete = outlineButton("🗑");
-        delete.setTextColor(CORAL);
-        delete.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                confirmDelete("Delete this entry?", new Runnable() {
-                    @Override
-                    public void run() {
-                        db.deleteEntry(entry.id);
-                        if (parentDialog != null && parentDialog[0] != null) parentDialog[0].dismiss();
-                        render();
-                        showDayDetailsDialog(selectedEntryDay);
-                    }
-                });
-            }
-        });
-        icons.addView(delete, smallActionParams());
+        if (entry.id > 0) {
+            Button delete = outlineButton("🗑");
+            delete.setTextColor(CORAL);
+            delete.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    confirmDelete("Delete this entry?", new Runnable() {
+                        @Override
+                        public void run() {
+                            db.deleteEntry(entry.id);
+                            if (parentDialog != null && parentDialog[0] != null) parentDialog[0].dismiss();
+                            render();
+                            showDayDetailsDialog(selectedEntryDay);
+                        }
+                    });
+                }
+            });
+            icons.addView(delete, smallActionParams());
+        }
         card.addView(icons);
         return card;
     }
@@ -2567,6 +2863,7 @@ public class MainActivity extends Activity {
     private LinearLayout goalCard(final Goal goal, String currency, boolean withActions) {
         double percent = goal.targetAmount == 0 ? 0 : (goal.currentAmount / goal.targetAmount) * 100.0;
         LinearLayout card = card();
+        if (!withActions) makeCardNavigate(card, 5);
         LinearLayout title = horizontal();
         title.addView(iconBubble("🎯"));
         LinearLayout details = new LinearLayout(this);
@@ -3307,7 +3604,8 @@ public class MainActivity extends Activity {
         button.setPadding(dp(8), 0, dp(8), 0);
         button.setTypeface(friendlyTypeface(active ? Typeface.BOLD : Typeface.NORMAL));
         button.setTextColor(active ? Color.WHITE : MUTED);
-        button.setBackground(active ? gradient(accent, blend(accent, BLUE), dp(16)) : round(Color.rgb(250, 252, 255), dp(16), 0));
+        button.setBackground(active ? gradient(accent, blend(accent, CASH_BLUE), dp(16))
+                : round(Color.argb(132, 255, 255, 255), dp(16), 0));
         return button;
     }
 
@@ -3335,8 +3633,18 @@ public class MainActivity extends Activity {
         return row;
     }
 
+    private int cashFlowStart(Country country, double netCashFlow) {
+        int accent = currencyColor(country);
+        int mood = netCashFlow < 0 ? blend(CORAL, CASH_BLUE) : CASH_MINT;
+        return blend(mood, accent);
+    }
+
+    private int cashFlowEnd(double netCashFlow) {
+        return netCashFlow < 0 ? blend(CORAL, APP_ICE) : CASH_BLUE;
+    }
+
     private GradientDrawable revolutBackground() {
-        return gradient(Color.rgb(239, 248, 250), Color.rgb(227, 240, 244), 0);
+        return gradient(APP_MINT, APP_ICE, 0);
     }
 
     private LinearLayout form() {
@@ -3709,9 +4017,34 @@ public class MainActivity extends Activity {
         return names;
     }
 
+    private int countryIndex(List<Country> countries, long countryId) {
+        for (int i = 0; i < countries.size(); i++) {
+            if (countries.get(i).id == countryId) return i;
+        }
+        return 0;
+    }
+
+    private void setAccountSelection(Spinner spinner, List<Account> accounts, long accountId) {
+        for (int i = 0; i < accounts.size(); i++) {
+            if (accounts.get(i).id == accountId) {
+                spinner.setSelection(i);
+                return;
+            }
+        }
+    }
+
     private String[] categoryLabels(List<Category> categories) {
         String[] labels = new String[categories.size()];
         for (int i = 0; i < categories.size(); i++) labels[i] = categories.get(i).icon + " " + categories.get(i).name;
+        return labels;
+    }
+
+    private String[] categoryRemoveLabels(List<Category> categories) {
+        String[] labels = new String[categories.size()];
+        for (int i = 0; i < categories.size(); i++) {
+            Category category = categories.get(i);
+            labels[i] = category.icon + " " + category.name + " · " + category.type;
+        }
         return labels;
     }
 
@@ -4007,9 +4340,16 @@ public class MainActivity extends Activity {
     }
 
     private static class Transfer {
+        long id;
+        long fromCountryId;
+        long toCountryId;
+        long fromAccountId;
+        long toAccountId;
         String date;
         String fromCountry;
         String toCountry;
+        String fromAccount;
+        String toAccount;
         String fromCurrency;
         String toCurrency;
         double fromAmount;
@@ -4022,7 +4362,7 @@ public class MainActivity extends Activity {
 
     private static class FinanceDb extends SQLiteOpenHelper {
         private static final String DB_NAME = "finance_tracker.db";
-        private static final int DB_VERSION = 5;
+        private static final int DB_VERSION = 7;
 
         FinanceDb(Context context) {
             super(context, DB_NAME, null, DB_VERSION);
@@ -4048,6 +4388,12 @@ public class MainActivity extends Activity {
             }
             if (oldVersion < 5) {
                 migrateV5(db);
+            }
+            if (oldVersion < 6) {
+                migrateV6(db);
+            }
+            if (oldVersion < 7) {
+                migrateV7(db);
             }
         }
 
@@ -4083,6 +4429,9 @@ public class MainActivity extends Activity {
                     "repeat_interval INTEGER NOT NULL DEFAULT 0," +
                     "repeat_unit TEXT," +
                     "repeat_count INTEGER NOT NULL DEFAULT 0," +
+                    "source_type TEXT," +
+                    "source_id INTEGER NOT NULL DEFAULT 0," +
+                    "affects_account INTEGER NOT NULL DEFAULT 1," +
                     "created_at TEXT NOT NULL)");
             db.execSQL("CREATE TABLE investments (" +
                     "id INTEGER PRIMARY KEY AUTOINCREMENT," +
@@ -4187,12 +4536,78 @@ public class MainActivity extends Activity {
             seedMissingDefaultCategories(db);
         }
 
+        private void migrateV6(SQLiteDatabase db) {
+            addColumnIfMissing(db, "entries", "source_type TEXT");
+            addColumnIfMissing(db, "entries", "source_id INTEGER NOT NULL DEFAULT 0");
+            addColumnIfMissing(db, "entries", "affects_account INTEGER NOT NULL DEFAULT 1");
+            db.execSQL("UPDATE entries SET affects_account = 1 WHERE affects_account IS NULL");
+            db.execSQL("UPDATE entries SET affects_account = 0 WHERE notes IN ('Auto-added from currency transfer','Auto-added from investment maturity')");
+            seedMissingDefaultCategories(db);
+        }
+
+        private void migrateV7(SQLiteDatabase db) {
+            seedMissingDefaultCategories(db);
+            backfillTransferEntries(db);
+        }
+
+        private void backfillTransferEntries(SQLiteDatabase db) {
+            Cursor cursor = db.rawQuery(
+                    "SELECT id, date, from_country_id, to_country_id, from_account_id, to_account_id, from_amount, to_amount, fee_amount " +
+                            "FROM transfers",
+                    null);
+            try {
+                while (cursor.moveToNext()) {
+                    long transferId = cursor.getLong(0);
+                    String date = cursor.getString(1);
+                    long fromCountryId = cursor.getLong(2);
+                    long toCountryId = cursor.getLong(3);
+                    long fromAccountId = cursor.getLong(4);
+                    long toAccountId = cursor.getLong(5);
+                    double fromAmount = cursor.getDouble(6);
+                    double toAmount = cursor.getDouble(7);
+                    double feeAmount = cursor.getDouble(8);
+                    if (countInDb(db, "SELECT COUNT(*) FROM entries WHERE source_type = ? AND source_id = ?",
+                            SOURCE_TRANSFER_OUT, String.valueOf(transferId)) == 0) {
+                        insertEntry(db, fromCountryId, "Expense", date, "Transfer to receiving account", fromAmount,
+                                "Transfers", "", fromAccountId, "Auto-added from currency transfer", "",
+                                false, 0, "", 0, "", 0, SOURCE_TRANSFER_OUT, transferId, false);
+                    }
+                    if (countInDb(db, "SELECT COUNT(*) FROM entries WHERE source_type = ? AND source_id = ?",
+                            SOURCE_TRANSFER_IN, String.valueOf(transferId)) == 0) {
+                        insertEntry(db, toCountryId, "Income", date, "Transfer from source account", toAmount,
+                                "Transfers", "", toAccountId, "Auto-added from currency transfer", "",
+                                false, 0, "", 0, "", 0, SOURCE_TRANSFER_IN, transferId, false);
+                    }
+                    if (feeAmount > 0 && countInDb(db, "SELECT COUNT(*) FROM entries WHERE source_type = ? AND source_id = ?",
+                            SOURCE_TRANSFER_FEE, String.valueOf(transferId)) == 0) {
+                        ContentValues source = new ContentValues();
+                        source.put("source_type", SOURCE_TRANSFER_FEE);
+                        source.put("source_id", transferId);
+                        source.put("affects_account", 0);
+                        int updated = db.update("entries", source,
+                                "type = 'Expense' AND title = 'Transfer fee' AND date = ? AND account_id = ? AND amount = ? " +
+                                        "AND notes = 'Auto-added from currency transfer' AND (source_type IS NULL OR source_type = '')",
+                                new String[]{date, String.valueOf(fromAccountId), String.valueOf(feeAmount)});
+                        if (updated == 0) {
+                            insertEntry(db, fromCountryId, "Expense", date, "Transfer fee", feeAmount,
+                                    "Fees", "", fromAccountId, "Auto-added from currency transfer", "",
+                                    false, 0, "", 0, "", 0, SOURCE_TRANSFER_FEE, transferId, false);
+                        }
+                    }
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+
         void ensureRuntimeSchema() {
             SQLiteDatabase db = getWritableDatabase();
             createV2Tables(db);
             migrateV3(db);
             migrateV4(db);
             migrateV5(db);
+            migrateV6(db);
+            migrateV7(db);
         }
 
         private void addColumnIfMissing(SQLiteDatabase db, String table, String definition) {
@@ -4252,6 +4667,9 @@ public class MainActivity extends Activity {
             addDefaultCategory(db, "Taxes", "🧾", "Expense");
             addDefaultCategory(db, "Insurance", "🛡", "Expense");
             addDefaultCategory(db, "Fees", "💸", "Expense");
+            addDefaultCategory(db, "Investments", "📈", "Expense");
+            addDefaultCategory(db, "Transfers", "⇄", "Income");
+            addDefaultCategory(db, "Transfers", "⇄", "Expense");
         }
 
         private void addDefaultCategory(SQLiteDatabase db, String name, String icon, String type) {
@@ -4417,6 +4835,29 @@ public class MainActivity extends Activity {
             return result;
         }
 
+        Account account(long accountId) {
+            Cursor cursor = getReadableDatabase().rawQuery(
+                    "SELECT id, name, type, balance, currency FROM accounts WHERE id = ?",
+                    new String[]{String.valueOf(accountId)});
+            try {
+                if (cursor.moveToFirst()) {
+                    Account account = new Account();
+                    account.id = cursor.getLong(0);
+                    account.name = cursor.getString(1);
+                    account.type = cursor.getString(2);
+                    account.balance = cursor.getDouble(3);
+                    account.currency = cursor.getString(4);
+                    return account;
+                }
+            } finally {
+                cursor.close();
+            }
+            Account empty = new Account();
+            empty.name = "Account";
+            empty.currency = "USD";
+            return empty;
+        }
+
         List<Category> categories(long countryId) {
             return categories(countryId, "");
         }
@@ -4520,30 +4961,44 @@ public class MainActivity extends Activity {
             SQLiteDatabase db = getWritableDatabase();
             db.beginTransaction();
             try {
-                ContentValues values = new ContentValues();
-                values.put("country_id", countryId);
-                values.put("type", type);
-                values.put("date", date);
-                values.put("title", title);
-                values.put("amount", amount);
-                values.put("category", category);
-                values.put("subcategory", subcategory);
-                values.put("account_id", accountId);
-                values.put("notes", notes);
-                values.put("bill_uri", billUri);
-                values.put("tax_flag", taxFlag ? 1 : 0);
-                values.put("tax_amount", taxAmount);
-                values.put("tax_title", taxTitle);
-                values.put("repeat_interval", repeatInterval);
-                values.put("repeat_unit", repeatUnit);
-                values.put("repeat_count", repeatCount);
-                values.put("created_at", now());
-                db.insert("entries", null, values);
-                adjustAccount(db, accountId, "Income".equals(type) ? amount : -amount);
+                insertEntry(db, countryId, type, date, title, amount, category, subcategory, accountId,
+                        notes, billUri, taxFlag, taxAmount, taxTitle, repeatInterval, repeatUnit, repeatCount,
+                        "", 0, true);
                 db.setTransactionSuccessful();
             } finally {
                 db.endTransaction();
             }
+        }
+
+        private long insertEntry(SQLiteDatabase db, long countryId, String type, String date, String title, double amount,
+                                 String category, String subcategory, long accountId, String notes,
+                                 String billUri, boolean taxFlag, double taxAmount, String taxTitle,
+                                 int repeatInterval, String repeatUnit, int repeatCount,
+                                 String sourceType, long sourceId, boolean affectsAccount) {
+            ContentValues values = new ContentValues();
+            values.put("country_id", countryId);
+            values.put("type", type);
+            values.put("date", date);
+            values.put("title", title);
+            values.put("amount", amount);
+            values.put("category", category);
+            values.put("subcategory", subcategory);
+            values.put("account_id", accountId);
+            values.put("notes", notes);
+            values.put("bill_uri", billUri);
+            values.put("tax_flag", taxFlag ? 1 : 0);
+            values.put("tax_amount", taxAmount);
+            values.put("tax_title", taxTitle);
+            values.put("repeat_interval", repeatInterval);
+            values.put("repeat_unit", repeatUnit);
+            values.put("repeat_count", repeatCount);
+            values.put("source_type", sourceType);
+            values.put("source_id", sourceId);
+            values.put("affects_account", affectsAccount ? 1 : 0);
+            values.put("created_at", now());
+            long id = db.insert("entries", null, values);
+            if (affectsAccount) adjustAccount(db, accountId, "Income".equals(type) ? amount : -amount);
+            return id;
         }
 
         List<Entry> entries(long countryId) {
@@ -4590,19 +5045,81 @@ public class MainActivity extends Activity {
             } finally {
                 cursor.close();
             }
+            appendMissingTransferEntries(result, countryId, sinceDate);
+            Collections.sort(result, new Comparator<Entry>() {
+                @Override
+                public int compare(Entry left, Entry right) {
+                    int date = safe(right.date).compareTo(safe(left.date));
+                    if (date != 0) return date;
+                    return Long.compare(right.id, left.id);
+                }
+            });
             return result;
+        }
+
+        private void appendMissingTransferEntries(List<Entry> result, long countryId, String sinceDate) {
+            appendMissingTransferSide(result, countryId, sinceDate, true);
+            appendMissingTransferSide(result, countryId, sinceDate, false);
+        }
+
+        private void appendMissingTransferSide(List<Entry> result, long countryId, String sinceDate, boolean income) {
+            String sourceType = income ? SOURCE_TRANSFER_IN : SOURCE_TRANSFER_OUT;
+            String countryColumn = income ? "to_country_id" : "from_country_id";
+            String accountColumn = income ? "to_account_id" : "from_account_id";
+            String amountColumn = income ? "to_amount" : "from_amount";
+            String title = income ? "Transfer from source account" : "Transfer to receiving account";
+            String type = income ? "Income" : "Expense";
+            List<String> args = new ArrayList<String>();
+            args.add(sourceType);
+            args.add(String.valueOf(countryId));
+            String sql = "SELECT t.id, t.date, t." + amountColumn + ", t." + accountColumn + ", COALESCE(a.name, 'Transfer account') " +
+                    "FROM transfers t LEFT JOIN entries e ON e.source_type = ? AND e.source_id = t.id " +
+                    "LEFT JOIN accounts a ON a.id = t." + accountColumn + " " +
+                    "WHERE t." + countryColumn + " = ? AND e.id IS NULL";
+            if (sinceDate != null && sinceDate.length() > 0) {
+                sql += " AND t.date >= ?";
+                args.add(sinceDate);
+            }
+            Cursor cursor = getReadableDatabase().rawQuery(sql, args.toArray(new String[args.size()]));
+            try {
+                while (cursor.moveToNext()) {
+                    Entry entry = new Entry();
+                    long transferId = cursor.getLong(0);
+                    entry.id = -((transferId * 10) + (income ? 1 : 2));
+                    entry.type = type;
+                    entry.date = cursor.getString(1);
+                    entry.title = title;
+                    entry.amount = cursor.getDouble(2);
+                    entry.category = "Transfers";
+                    entry.subcategory = "";
+                    entry.accountId = cursor.getLong(3);
+                    entry.accountName = cursor.getString(4);
+                    entry.notes = "Auto-added from currency transfer";
+                    entry.billUri = "";
+                    entry.taxFlag = false;
+                    entry.taxAmount = 0;
+                    entry.taxTitle = "";
+                    entry.repeatInterval = 0;
+                    entry.repeatUnit = "";
+                    entry.repeatCount = 0;
+                    result.add(entry);
+                }
+            } finally {
+                cursor.close();
+            }
         }
 
         void deleteEntry(long id) {
             SQLiteDatabase db = getWritableDatabase();
-            Cursor cursor = db.rawQuery("SELECT type, amount, account_id FROM entries WHERE id = ?", new String[]{String.valueOf(id)});
+            Cursor cursor = db.rawQuery("SELECT type, amount, account_id, affects_account FROM entries WHERE id = ?", new String[]{String.valueOf(id)});
             db.beginTransaction();
             try {
                 if (cursor.moveToFirst()) {
                     String type = cursor.getString(0);
                     double amount = cursor.getDouble(1);
                     long accountId = cursor.getLong(2);
-                    adjustAccount(db, accountId, "Income".equals(type) ? -amount : amount);
+                    boolean affectsAccount = cursor.isNull(3) || cursor.getInt(3) == 1;
+                    if (affectsAccount) adjustAccount(db, accountId, "Income".equals(type) ? -amount : amount);
                 }
                 db.delete("entries", "id = ?", new String[]{String.valueOf(id)});
                 db.setTransactionSuccessful();
@@ -4615,6 +5132,8 @@ public class MainActivity extends Activity {
         double[] summary(long countryId) {
             double income = sum("SELECT SUM(amount) FROM entries WHERE country_id = ? AND type = 'Income'", String.valueOf(countryId));
             double expenses = sum("SELECT SUM(amount) FROM entries WHERE country_id = ? AND type = 'Expense'", String.valueOf(countryId));
+            income += missingTransferTotal(countryId, true, "", "");
+            expenses += missingTransferTotal(countryId, false, "", "");
             return new double[]{income, expenses, income - expenses};
         }
 
@@ -4623,7 +5142,30 @@ public class MainActivity extends Activity {
                     String.valueOf(countryId), start, end);
             double expenses = sum("SELECT SUM(amount) FROM entries WHERE country_id = ? AND type = 'Expense' AND date >= ? AND date <= ?",
                     String.valueOf(countryId), start, end);
+            income += missingTransferTotal(countryId, true, start, end);
+            expenses += missingTransferTotal(countryId, false, start, end);
             return new double[]{income, expenses, income - expenses};
+        }
+
+        private double missingTransferTotal(long countryId, boolean income, String start, String end) {
+            String sourceType = income ? SOURCE_TRANSFER_IN : SOURCE_TRANSFER_OUT;
+            String countryColumn = income ? "to_country_id" : "from_country_id";
+            String amountColumn = income ? "to_amount" : "from_amount";
+            List<String> args = new ArrayList<String>();
+            args.add(sourceType);
+            args.add(String.valueOf(countryId));
+            String sql = "SELECT SUM(t." + amountColumn + ") FROM transfers t " +
+                    "LEFT JOIN entries e ON e.source_type = ? AND e.source_id = t.id " +
+                    "WHERE t." + countryColumn + " = ? AND e.id IS NULL";
+            if (start != null && start.length() > 0) {
+                sql += " AND t.date >= ?";
+                args.add(start);
+            }
+            if (end != null && end.length() > 0) {
+                sql += " AND t.date <= ?";
+                args.add(end);
+            }
+            return sum(sql, args.toArray(new String[args.size()]));
         }
 
         double taxTotal(long countryId) {
@@ -4661,8 +5203,10 @@ public class MainActivity extends Activity {
                 values.put("status", "Active");
                 values.put("notes", notes);
                 values.put("created_at", now());
-                db.insert("investments", null, values);
-                adjustAccount(db, accountId, -principal);
+                long investmentId = db.insert("investments", null, values);
+                insertEntry(db, countryId, "Expense", startDate, title + " opened", principal,
+                        "Investments", "", accountId, "Auto-added from investment opening", "",
+                        false, 0, "", 0, "", 0, SOURCE_INVESTMENT_OPEN, investmentId, true);
                 db.setTransactionSuccessful();
             } finally {
                 db.endTransaction();
@@ -4753,6 +5297,89 @@ public class MainActivity extends Activity {
             getWritableDatabase().update("investments", values, "id = ?", new String[]{String.valueOf(investmentId)});
         }
 
+        void updateInvestmentValueWithGain(Investment investment, long countryId, String date, double presentValue, double gain) {
+            SQLiteDatabase db = getWritableDatabase();
+            db.beginTransaction();
+            try {
+                ContentValues values = new ContentValues();
+                values.put("current_value", presentValue);
+                db.update("investments", values, "id = ?", new String[]{String.valueOf(investment.id)});
+                if (gain > 0) {
+                    insertEntry(db, countryId, "Income", date, investment.title + " capital gains", gain,
+                            "Investments", "", investment.accountId, "Auto-added from investment update", "",
+                            false, 0, "", 0, "", 0, SOURCE_INVESTMENT_GAIN, investment.id, true);
+                }
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+        }
+
+        void addInvestmentFunds(Investment investment, long countryId, String date, double amount, double maturityValue, String notes) {
+            SQLiteDatabase db = getWritableDatabase();
+            db.beginTransaction();
+            try {
+                ContentValues values = new ContentValues();
+                values.put("principal", investment.principal + amount);
+                values.put("current_value", investment.currentValue + amount);
+                values.put("maturity_value", maturityValue);
+                db.update("investments", values, "id = ?", new String[]{String.valueOf(investment.id)});
+                String entryNotes = notes == null || notes.trim().length() == 0
+                        ? "Auto-added from investment additional funds" : notes.trim();
+                insertEntry(db, countryId, "Expense", date, investment.title + " added funds", amount,
+                        "Investments", "", investment.accountId,
+                        entryNotes, "",
+                        false, 0, "", 0, "", 0, SOURCE_INVESTMENT_ADD, investment.id, true);
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+        }
+
+        void deleteInvestment(Investment investment) {
+            SQLiteDatabase db = getWritableDatabase();
+            db.beginTransaction();
+            try {
+                double reversedOutflow = deleteSourceEntries(db, investment.id);
+                if (!"Created from maturity reinvestment".equals(investment.notes) && reversedOutflow < investment.principal) {
+                    adjustAccount(db, investment.accountId, investment.principal - reversedOutflow);
+                }
+                db.delete("investments", "id = ?", new String[]{String.valueOf(investment.id)});
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+        }
+
+        private double deleteSourceEntries(SQLiteDatabase db, long investmentId) {
+            Cursor cursor = db.rawQuery(
+                    "SELECT id, type, amount, account_id, affects_account FROM entries WHERE source_id = ? AND source_type IN (?,?,?,?)",
+                    new String[]{String.valueOf(investmentId), SOURCE_INVESTMENT_OPEN, SOURCE_INVESTMENT_ADD,
+                            SOURCE_INVESTMENT_GAIN, SOURCE_INVESTMENT_MATURITY});
+            List<Long> ids = new ArrayList<Long>();
+            double reversedOutflow = 0;
+            try {
+                while (cursor.moveToNext()) {
+                    long id = cursor.getLong(0);
+                    String type = cursor.getString(1);
+                    double amount = cursor.getDouble(2);
+                    long accountId = cursor.getLong(3);
+                    boolean affectsAccount = cursor.isNull(4) || cursor.getInt(4) == 1;
+                    if (affectsAccount) {
+                        adjustAccount(db, accountId, "Income".equals(type) ? -amount : amount);
+                        if ("Expense".equals(type)) reversedOutflow += amount;
+                    }
+                    ids.add(id);
+                }
+            } finally {
+                cursor.close();
+            }
+            for (Long id : ids) {
+                db.delete("entries", "id = ?", new String[]{String.valueOf(id)});
+            }
+            return reversedOutflow;
+        }
+
         void processMaturity(Investment investment, String date, double maturityValue, String action) {
             SQLiteDatabase db = getWritableDatabase();
             db.beginTransaction();
@@ -4767,24 +5394,10 @@ public class MainActivity extends Activity {
                     createReinvestment(db, investment, maturityValue, date, action);
                 }
                 if (interest > 0) {
-                    ContentValues entry = new ContentValues();
-                    entry.put("country_id", investmentCountryId(db, investment.id));
-                    entry.put("type", "Income");
-                    entry.put("date", date);
-                    entry.put("title", investment.title + " maturity interest");
-                    entry.put("amount", interest);
-                    entry.put("category", "Interest");
-                    entry.put("subcategory", "");
-                    entry.put("account_id", investment.accountId);
-                    entry.put("notes", "Auto-added from investment maturity");
-                    entry.put("bill_uri", "");
-                    entry.put("tax_flag", 0);
-                    entry.put("tax_amount", 0);
-                    entry.put("tax_title", "");
-                    entry.put("repeat_interval", 0);
-                    entry.put("repeat_unit", "");
-                    entry.put("created_at", now());
-                    db.insert("entries", null, entry);
+                    insertEntry(db, investmentCountryId(db, investment.id), "Income", date,
+                            investment.title + " maturity interest", interest, "Interest", "", investment.accountId,
+                            "Auto-added from investment maturity", "", false, 0, "", 0, "", 0,
+                            SOURCE_INVESTMENT_MATURITY, investment.id, false);
                 }
                 ContentValues values = new ContentValues();
                 values.put("current_value", maturityValue);
@@ -4988,70 +5601,145 @@ public class MainActivity extends Activity {
             SQLiteDatabase db = getWritableDatabase();
             db.beginTransaction();
             try {
-                ContentValues values = new ContentValues();
-                values.put("date", date);
-                values.put("from_country_id", fromCountryId);
-                values.put("to_country_id", toCountryId);
-                values.put("from_account_id", fromAccountId);
-                values.put("to_account_id", toAccountId);
-                values.put("from_amount", fromAmount);
-                values.put("to_amount", toAmount);
-                values.put("rate", rate);
-                values.put("fee_amount", feeAmount);
-                values.put("rate_source", rateSource);
-                values.put("notes", notes);
-                values.put("created_at", now());
-                db.insert("transfers", null, values);
-                adjustAccount(db, fromAccountId, -(fromAmount + Math.max(0, feeAmount)));
-                adjustAccount(db, toAccountId, toAmount);
-                if (feeAmount > 0) {
-                    ContentValues fee = new ContentValues();
-                    fee.put("country_id", fromCountryId);
-                    fee.put("type", "Expense");
-                    fee.put("date", date);
-                    fee.put("title", "Transfer fee");
-                    fee.put("amount", feeAmount);
-                    fee.put("category", "Fees");
-                    fee.put("subcategory", "");
-                    fee.put("account_id", fromAccountId);
-                    fee.put("notes", "Auto-added from currency transfer");
-                    fee.put("bill_uri", "");
-                    fee.put("tax_flag", 0);
-                    fee.put("tax_amount", 0);
-                    fee.put("tax_title", "");
-                    fee.put("repeat_interval", 0);
-                    fee.put("repeat_unit", "");
-                    fee.put("repeat_count", 0);
-                    fee.put("created_at", now());
-                    db.insert("entries", null, fee);
-                }
+                insertTransfer(db, date, fromCountryId, toCountryId, fromAccountId, toAccountId,
+                        fromAmount, toAmount, rate, feeAmount, rateSource, notes);
                 db.setTransactionSuccessful();
             } finally {
                 db.endTransaction();
             }
         }
 
+        void updateTransfer(long transferId, String date, long fromCountryId, long toCountryId, long fromAccountId, long toAccountId,
+                            double fromAmount, double toAmount, double rate, double feeAmount, String rateSource, String notes) {
+            SQLiteDatabase db = getWritableDatabase();
+            db.beginTransaction();
+            try {
+                reverseTransfer(db, transferId);
+                db.delete("transfers", "id = ?", new String[]{String.valueOf(transferId)});
+                insertTransfer(db, date, fromCountryId, toCountryId, fromAccountId, toAccountId,
+                        fromAmount, toAmount, rate, feeAmount, rateSource, notes);
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+        }
+
+        void deleteTransfer(long transferId) {
+            SQLiteDatabase db = getWritableDatabase();
+            db.beginTransaction();
+            try {
+                reverseTransfer(db, transferId);
+                db.delete("transfers", "id = ?", new String[]{String.valueOf(transferId)});
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+        }
+
+        private long insertTransfer(SQLiteDatabase db, String date, long fromCountryId, long toCountryId,
+                                    long fromAccountId, long toAccountId, double fromAmount, double toAmount,
+                                    double rate, double feeAmount, String rateSource, String notes) {
+            ContentValues values = new ContentValues();
+            values.put("date", date);
+            values.put("from_country_id", fromCountryId);
+            values.put("to_country_id", toCountryId);
+            values.put("from_account_id", fromAccountId);
+            values.put("to_account_id", toAccountId);
+            values.put("from_amount", fromAmount);
+            values.put("to_amount", toAmount);
+            values.put("rate", rate);
+            values.put("fee_amount", feeAmount);
+            values.put("rate_source", rateSource);
+            values.put("notes", notes);
+            values.put("created_at", now());
+            long transferId = db.insert("transfers", null, values);
+            adjustAccount(db, fromAccountId, -(fromAmount + Math.max(0, feeAmount)));
+            adjustAccount(db, toAccountId, toAmount);
+            insertEntry(db, fromCountryId, "Expense", date, "Transfer to receiving account", fromAmount,
+                    "Transfers", "", fromAccountId, "Auto-added from currency transfer", "",
+                    false, 0, "", 0, "", 0, SOURCE_TRANSFER_OUT, transferId, false);
+            insertEntry(db, toCountryId, "Income", date, "Transfer from source account", toAmount,
+                    "Transfers", "", toAccountId, "Auto-added from currency transfer", "",
+                    false, 0, "", 0, "", 0, SOURCE_TRANSFER_IN, transferId, false);
+            if (feeAmount > 0) {
+                insertEntry(db, fromCountryId, "Expense", date, "Transfer fee", feeAmount,
+                        "Fees", "", fromAccountId, "Auto-added from currency transfer", "",
+                        false, 0, "", 0, "", 0, SOURCE_TRANSFER_FEE, transferId, false);
+            }
+            return transferId;
+        }
+
+        private void reverseTransfer(SQLiteDatabase db, long transferId) {
+            Cursor cursor = db.rawQuery(
+                    "SELECT date, from_account_id, to_account_id, from_amount, to_amount, fee_amount FROM transfers WHERE id = ?",
+                    new String[]{String.valueOf(transferId)});
+            try {
+                if (cursor.moveToFirst()) {
+                    String date = cursor.getString(0);
+                    long fromAccountId = cursor.getLong(1);
+                    long toAccountId = cursor.getLong(2);
+                    double fromAmount = cursor.getDouble(3);
+                    double toAmount = cursor.getDouble(4);
+                    double feeAmount = cursor.getDouble(5);
+                    adjustAccount(db, fromAccountId, fromAmount + Math.max(0, feeAmount));
+                    adjustAccount(db, toAccountId, -toAmount);
+                    int deletedLinkedEntries = db.delete("entries", "source_id = ? AND source_type IN (?,?,?)",
+                            new String[]{String.valueOf(transferId), SOURCE_TRANSFER_FEE, SOURCE_TRANSFER_OUT, SOURCE_TRANSFER_IN});
+                    if (deletedLinkedEntries == 0 && feeAmount > 0) {
+                        deleteLegacyTransferFee(db, date, fromAccountId, feeAmount);
+                    }
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+
+        private void deleteLegacyTransferFee(SQLiteDatabase db, String date, long fromAccountId, double feeAmount) {
+            Cursor cursor = db.rawQuery(
+                    "SELECT id FROM entries WHERE type = 'Expense' AND title = 'Transfer fee' AND date = ? " +
+                            "AND account_id = ? AND amount = ? AND notes = 'Auto-added from currency transfer' " +
+                            "AND (source_type IS NULL OR source_type = '') ORDER BY id DESC LIMIT 1",
+                    new String[]{date, String.valueOf(fromAccountId), String.valueOf(feeAmount)});
+            try {
+                if (cursor.moveToFirst()) {
+                    db.delete("entries", "id = ?", new String[]{String.valueOf(cursor.getLong(0))});
+                }
+            } finally {
+                cursor.close();
+            }
+        }
+
         List<Transfer> transfers() {
             List<Transfer> result = new ArrayList<Transfer>();
             Cursor cursor = getReadableDatabase().rawQuery(
-                    "SELECT t.date, fc.name, tc.name, fc.currency, tc.currency, t.from_amount, t.to_amount, t.rate, t.fee_amount, t.rate_source, t.notes " +
+                    "SELECT t.id, t.from_country_id, t.to_country_id, t.from_account_id, t.to_account_id, " +
+                            "t.date, fc.name, tc.name, COALESCE(fa.name, 'Source account'), COALESCE(ta.name, 'Receiving account'), " +
+                            "fc.currency, tc.currency, t.from_amount, t.to_amount, t.rate, t.fee_amount, t.rate_source, t.notes " +
                             "FROM transfers t JOIN countries fc ON fc.id = t.from_country_id JOIN countries tc ON tc.id = t.to_country_id " +
+                            "LEFT JOIN accounts fa ON fa.id = t.from_account_id LEFT JOIN accounts ta ON ta.id = t.to_account_id " +
                             "ORDER BY t.date DESC, t.id DESC",
                     null);
             try {
                 while (cursor.moveToNext()) {
                     Transfer transfer = new Transfer();
-                    transfer.date = cursor.getString(0);
-                    transfer.fromCountry = cursor.getString(1);
-                    transfer.toCountry = cursor.getString(2);
-                    transfer.fromCurrency = cursor.getString(3);
-                    transfer.toCurrency = cursor.getString(4);
-                    transfer.fromAmount = cursor.getDouble(5);
-                    transfer.toAmount = cursor.getDouble(6);
-                    transfer.rate = cursor.getDouble(7);
-                    transfer.feeAmount = cursor.getDouble(8);
-                    transfer.rateSource = safe(cursor.getString(9));
-                    transfer.notes = safe(cursor.getString(10));
+                    transfer.id = cursor.getLong(0);
+                    transfer.fromCountryId = cursor.getLong(1);
+                    transfer.toCountryId = cursor.getLong(2);
+                    transfer.fromAccountId = cursor.getLong(3);
+                    transfer.toAccountId = cursor.getLong(4);
+                    transfer.date = cursor.getString(5);
+                    transfer.fromCountry = cursor.getString(6);
+                    transfer.toCountry = cursor.getString(7);
+                    transfer.fromAccount = cursor.getString(8);
+                    transfer.toAccount = cursor.getString(9);
+                    transfer.fromCurrency = cursor.getString(10);
+                    transfer.toCurrency = cursor.getString(11);
+                    transfer.fromAmount = cursor.getDouble(12);
+                    transfer.toAmount = cursor.getDouble(13);
+                    transfer.rate = cursor.getDouble(14);
+                    transfer.feeAmount = cursor.getDouble(15);
+                    transfer.rateSource = safe(cursor.getString(16));
+                    transfer.notes = safe(cursor.getString(17));
                     result.add(transfer);
                 }
             } finally {
@@ -5158,6 +5846,11 @@ public class MainActivity extends Activity {
 
         double goalReservedForAccount(long accountId) {
             return sum("SELECT SUM(current_amount) FROM goals WHERE account_id = ?", String.valueOf(accountId));
+        }
+
+        double goalReservedForAccountExcept(long accountId, long goalId) {
+            return sum("SELECT SUM(current_amount) FROM goals WHERE account_id = ? AND id != ?",
+                    String.valueOf(accountId), String.valueOf(goalId));
         }
 
         String allCountriesAccountSummary() {
