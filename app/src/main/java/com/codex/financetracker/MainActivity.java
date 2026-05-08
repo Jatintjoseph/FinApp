@@ -4362,7 +4362,7 @@ public class MainActivity extends Activity {
 
     private static class FinanceDb extends SQLiteOpenHelper {
         private static final String DB_NAME = "finance_tracker.db";
-        private static final int DB_VERSION = 7;
+        private static final int DB_VERSION = 8;
 
         FinanceDb(Context context) {
             super(context, DB_NAME, null, DB_VERSION);
@@ -4394,6 +4394,9 @@ public class MainActivity extends Activity {
             }
             if (oldVersion < 7) {
                 migrateV7(db);
+            }
+            if (oldVersion < 8) {
+                migrateV8(db);
             }
         }
 
@@ -4504,6 +4507,7 @@ public class MainActivity extends Activity {
                     "rate_source TEXT," +
                     "notes TEXT," +
                     "created_at TEXT NOT NULL)");
+            createCategoryRemovalTable(db);
         }
 
         private void migrateV3(SQLiteDatabase db) {
@@ -4548,6 +4552,32 @@ public class MainActivity extends Activity {
         private void migrateV7(SQLiteDatabase db) {
             seedMissingDefaultCategories(db);
             backfillTransferEntries(db);
+        }
+
+        private void migrateV8(SQLiteDatabase db) {
+            createCategoryRemovalTable(db);
+            cleanupDuplicateCategories(db);
+        }
+
+        private void createCategoryRemovalTable(SQLiteDatabase db) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS category_removals (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "country_id INTEGER NOT NULL," +
+                    "name TEXT NOT NULL," +
+                    "type TEXT NOT NULL," +
+                    "created_at TEXT NOT NULL)");
+        }
+
+        private void cleanupDuplicateCategories(SQLiteDatabase db) {
+            db.execSQL("DELETE FROM categories WHERE id NOT IN (" +
+                    "SELECT MIN(id) FROM categories GROUP BY country_id, LOWER(TRIM(name)), type)");
+            db.execSQL("DELETE FROM categories WHERE country_id != 0 AND EXISTS (" +
+                    "SELECT 1 FROM categories d " +
+                    "WHERE d.country_id = 0 " +
+                    "AND LOWER(TRIM(d.name)) = LOWER(TRIM(categories.name)) " +
+                    "AND d.type = categories.type)");
+            db.execSQL("DELETE FROM category_removals WHERE id NOT IN (" +
+                    "SELECT MIN(id) FROM category_removals GROUP BY country_id, LOWER(TRIM(name)), type)");
         }
 
         private void backfillTransferEntries(SQLiteDatabase db) {
@@ -4608,6 +4638,7 @@ public class MainActivity extends Activity {
             migrateV5(db);
             migrateV6(db);
             migrateV7(db);
+            migrateV8(db);
         }
 
         private void addColumnIfMissing(SQLiteDatabase db, String table, String definition) {
@@ -4864,8 +4895,13 @@ public class MainActivity extends Activity {
 
         List<Category> categories(long countryId, String type) {
             List<Category> result = new ArrayList<Category>();
-            String sql = "SELECT id, country_id, name, icon, type, subcategories FROM categories WHERE (country_id = 0 OR country_id = ?)";
+            String sql = "SELECT id, country_id, name, icon, type, subcategories FROM categories " +
+                    "WHERE (country_id = ? OR (country_id = 0 AND NOT EXISTS (" +
+                    "SELECT 1 FROM category_removals removed WHERE removed.country_id = ? " +
+                    "AND LOWER(TRIM(removed.name)) = LOWER(TRIM(categories.name)) " +
+                    "AND removed.type = categories.type)))";
             List<String> args = new ArrayList<String>();
+            args.add(String.valueOf(countryId));
             args.add(String.valueOf(countryId));
             if (type != null && type.length() > 0) {
                 sql += " AND type = ?";
@@ -4890,14 +4926,56 @@ public class MainActivity extends Activity {
             return result;
         }
 
-        void addCategory(long countryId, String name, String icon, String type) {
+        boolean addCategory(long countryId, String name, String icon, String type) {
+            SQLiteDatabase db = getWritableDatabase();
+            String cleaned = safe(name).trim();
+            if (cleaned.length() == 0) return false;
+            if (countInDb(db, "SELECT COUNT(*) FROM categories WHERE country_id = 0 AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND type = ?",
+                    cleaned, type) > 0) {
+                db.delete("category_removals", "country_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND type = ?",
+                        new String[]{String.valueOf(countryId), cleaned, type});
+                return false;
+            }
+            Cursor cursor = db.rawQuery(
+                    "SELECT id FROM categories WHERE country_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND type = ? LIMIT 1",
+                    new String[]{String.valueOf(countryId), cleaned, type});
+            try {
+                if (cursor.moveToFirst()) {
+                    ContentValues existing = new ContentValues();
+                    existing.put("icon", icon);
+                    db.update("categories", existing, "id = ?", new String[]{String.valueOf(cursor.getLong(0))});
+                    return false;
+                }
+            } finally {
+                cursor.close();
+            }
             ContentValues values = new ContentValues();
             values.put("country_id", countryId);
-            values.put("name", name);
+            values.put("name", cleaned);
             values.put("icon", icon);
             values.put("type", type);
             values.put("subcategories", "");
-            getWritableDatabase().insert("categories", null, values);
+            db.insert("categories", null, values);
+            cleanupDuplicateCategories(db);
+            return true;
+        }
+
+        void removeCategory(long countryId, Category category) {
+            SQLiteDatabase db = getWritableDatabase();
+            if (category.countryId == 0) {
+                if (countInDb(db, "SELECT COUNT(*) FROM category_removals WHERE country_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND type = ?",
+                        String.valueOf(countryId), category.name, category.type) == 0) {
+                    ContentValues values = new ContentValues();
+                    values.put("country_id", countryId);
+                    values.put("name", category.name);
+                    values.put("type", category.type);
+                    values.put("created_at", now());
+                    db.insert("category_removals", null, values);
+                }
+            } else {
+                db.delete("categories", "id = ?", new String[]{String.valueOf(category.id)});
+            }
+            cleanupDuplicateCategories(db);
         }
 
         String categoryIcon(long countryId, String categoryName) {
