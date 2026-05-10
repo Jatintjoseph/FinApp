@@ -84,6 +84,7 @@ public class MainActivity extends Activity {
     private static final String SOURCE_INVESTMENT_ADD = "investment_add";
     private static final String SOURCE_INVESTMENT_GAIN = "investment_gain";
     private static final String SOURCE_INVESTMENT_MATURITY = "investment_maturity";
+    private static final String SOURCE_BALANCE_ADJUSTMENT = "balance_adjustment";
     private static final String[] TABS = {
             "⌂ Home", "↕ Entries", "▦ Budgets", "↗ Investments",
             "▣ Balances", "◎ Goals", "⇄ Transfers", "✚ Categories"
@@ -107,6 +108,7 @@ public class MainActivity extends Activity {
     private String selectedEntryReportType = "Expense";
     private Typeface interTypeface;
     private int currentDialogAccent = BLUE;
+    private boolean sideMenuOpen = false;
 
     private interface DialogSubmit {
         boolean submit();
@@ -195,7 +197,7 @@ public class MainActivity extends Activity {
     private void showOnboardingDialog() {
         LinearLayout form = form();
         final EditText firstName = input("What should I call you?", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
-        final EditText countryName = input("Currency account name", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        final EditText countryName = input("Name of Account", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         final Spinner currency = spinner(currencyLabels());
         setSpinnerToPrefix(currency, Locale.getDefault().getCountry().length() == 2
                 ? currencyForCountry(Locale.getDefault().getCountry())
@@ -210,7 +212,7 @@ public class MainActivity extends Activity {
                 String name = firstName.getText().toString().trim();
                 String country = countryName.getText().toString().trim();
                 if (name.length() == 0 || country.length() == 0) {
-                    toast("Please add your name and first currency account.");
+                    toast("Please add your name and first account.");
                     return false;
                 }
                 db.clearStarterCountriesIfEmpty();
@@ -235,6 +237,15 @@ public class MainActivity extends Activity {
             selectedCountryId = countries.get(0).id;
         }
 
+        if (sideMenuOpen) {
+            LinearLayout shell = new LinearLayout(this);
+            shell.setOrientation(LinearLayout.VERTICAL);
+            shell.setBackground(revolutBackground());
+            setContentView(shell);
+            addSideMenu(shell);
+            return;
+        }
+
         root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(revolutBackground());
@@ -246,7 +257,7 @@ public class MainActivity extends Activity {
         ScrollView scroll = new ScrollView(this);
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(0, dp(12), 0, dp(18));
+        content.setPadding(0, dp(12), 0, dp(96));
         scroll.addView(content, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -271,8 +282,8 @@ public class MainActivity extends Activity {
         root.setPadding(dp(24), dp(24), dp(24), dp(24));
         root.setBackground(revolutBackground());
         setContentView(root);
-        root.addView(text("Add a currency account to begin", 24, Typeface.BOLD, INK), matchWrap());
-        Button add = primaryButton("＋ Add currency account");
+        root.addView(text("Add an account to begin", 24, Typeface.BOLD, INK), matchWrap());
+        Button add = primaryButton("＋ Add account");
         add.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -298,7 +309,8 @@ public class MainActivity extends Activity {
         menu.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                showMainMenu();
+                sideMenuOpen = !sideMenuOpen;
+                render();
             }
         });
         top.addView(menu, new LinearLayout.LayoutParams(dp(46), dp(46)));
@@ -319,9 +331,13 @@ public class MainActivity extends Activity {
         copyParams.setMargins(dp(8), 0, 0, 0);
         top.addView(copy, copyParams);
 
+        LinearLayout avatarBox = horizontal();
+        avatarBox.setGravity(Gravity.CENTER);
+        avatarBox.setPadding(dp(12), dp(4), dp(12), dp(4));
         TextView avatar = profileAvatar(country, true);
-        attachAvatarSwitcher(avatar);
-        top.addView(avatar);
+        avatarBox.addView(avatar);
+        attachAvatarSwitcher(avatarBox);
+        top.addView(avatarBox, new LinearLayout.LayoutParams(dp(92), dp(58)));
         header.addView(top, matchWrap());
     }
 
@@ -330,10 +346,10 @@ public class MainActivity extends Activity {
         int accent = currencyColor(country);
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setPadding(0, dp(8), 0, dp(8));
+        shell.setPadding(0, dp(10), 0, dp(20));
         shell.setBackground(round(Color.argb(238, 250, 255, 254), dp(22), Color.rgb(187, 219, 224)));
         shell.setElevation(dp(10));
-        root.addView(shell, matchWrapWithMargins(0, dp(8), 0, dp(10)));
+        root.addView(shell, matchWrapWithMargins(0, dp(18), 0, dp(42)));
 
         HorizontalScrollView scroll = new HorizontalScrollView(this);
         scroll.setHorizontalScrollBarEnabled(false);
@@ -413,24 +429,24 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void attachAvatarSwitcher(final TextView avatar) {
+    private void attachAvatarSwitcher(final View avatar) {
         avatar.setOnTouchListener(new View.OnTouchListener() {
             private boolean moved;
 
             @Override
             public boolean onTouch(View touched, MotionEvent event) {
                 if (event.getAction() == MotionEvent.ACTION_DOWN) {
-                    swipeStartX = event.getX();
-                    swipeStartY = event.getY();
+                    swipeStartX = event.getRawX();
+                    swipeStartY = event.getRawY();
                     moved = false;
                     touched.setScaleX(0.96f);
                     touched.setScaleY(0.96f);
                     return true;
                 }
                 if (event.getAction() == MotionEvent.ACTION_MOVE) {
-                    float dx = event.getX() - swipeStartX;
-                    float dy = event.getY() - swipeStartY;
-                    if (Math.abs(dx) > dp(18) || Math.abs(dy) > dp(18)) moved = true;
+                    float dx = event.getRawX() - swipeStartX;
+                    float dy = event.getRawY() - swipeStartY;
+                    if (Math.abs(dx) > dp(10) || Math.abs(dy) > dp(10)) moved = true;
                     return true;
                 }
                 if (event.getAction() == MotionEvent.ACTION_CANCEL) {
@@ -441,11 +457,11 @@ public class MainActivity extends Activity {
                 if (event.getAction() == MotionEvent.ACTION_UP) {
                     touched.setScaleX(1f);
                     touched.setScaleY(1f);
-                    float dx = event.getX() - swipeStartX;
-                    float dy = event.getY() - swipeStartY;
-                    if (Math.abs(dx) > dp(42) && Math.abs(dx) > Math.abs(dy) * 1.4f) {
+                    float dx = event.getRawX() - swipeStartX;
+                    float dy = event.getRawY() - swipeStartY;
+                    if (Math.abs(dx) > dp(24) && Math.abs(dx) > Math.abs(dy) * 1.15f) {
                         switchCountryBySwipe(dx < 0);
-                    } else if (!moved || (Math.abs(dx) < dp(16) && Math.abs(dy) < dp(16))) {
+                    } else if (!moved || (Math.abs(dx) < dp(12) && Math.abs(dy) < dp(12))) {
                         showCountrySwitcherDialog();
                     }
                     return true;
@@ -460,7 +476,7 @@ public class MainActivity extends Activity {
         LinearLayout panel = form();
         Country current = db.getCountry(selectedCountryId);
         int accent = currencyColor(current);
-        addDialogHero(panel, currencySymbol(current.currency), "Currency accounts", "Tap to switch or add another currency account.", accent);
+        addDialogHero(panel, currencySymbol(current.currency), "Accounts", "Tap to switch or add another account.", accent);
 
         List<Country> countries = db.getCountries();
         for (final Country item : countries) {
@@ -477,7 +493,7 @@ public class MainActivity extends Activity {
             panel.addView(row);
         }
 
-        Button add = primaryButton("＋ Add currency account");
+        Button add = primaryButton("＋ Add account");
         add.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -504,7 +520,7 @@ public class MainActivity extends Activity {
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.addView(text(country.name, 16, Typeface.BOLD, INK));
-        copy.addView(text(currencySymbol(country.currency) + " currency account", 13, Typeface.NORMAL, MUTED));
+        copy.addView(text(currencySymbol(country.currency) + " account", 13, Typeface.NORMAL, MUTED));
         row.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         if (country.id == selectedCountryId) {
             row.addView(text("✓", 22, Typeface.BOLD, accent));
@@ -527,7 +543,7 @@ public class MainActivity extends Activity {
                     toast("This currency account has activity and cannot be deleted.");
                     return;
                 }
-                confirmDelete("Delete " + country.name + "?", new Runnable() {
+                confirmDelete("Confirm deletion of " + country.name + " account?", new Runnable() {
                     @Override
                     public void run() {
                         db.deleteCountry(country.id);
@@ -575,47 +591,63 @@ public class MainActivity extends Activity {
         return builder.toString();
     }
 
-    private void showMainMenu() {
-        final AlertDialog[] dialogHolder = new AlertDialog[1];
-        LinearLayout menu = form();
-        addDialogHero(menu, "☰", "Reports", "Choose a report type and then select the period and categories.", BLUE);
-        addMenuButton(menu, "↑ Income report", new View.OnClickListener() {
+    private void addSideMenu(LinearLayout shell) {
+        LinearLayout menu = new LinearLayout(this);
+        menu.setOrientation(LinearLayout.VERTICAL);
+        menu.setPadding(dp(14), dp(18), dp(12), dp(18));
+        menu.setBackground(gradient(Color.rgb(250, 255, 254), Color.rgb(232, 246, 252), dp(0)));
+        menu.setElevation(dp(10));
+        shell.addView(menu, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        LinearLayout header = horizontal();
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.addView(text("Menu", 24, Typeface.BOLD, INK), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Button close = tinyIconButton("×", CORAL);
+        close.setTextSize(22);
+        close.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if (dialogHolder[0] != null) dialogHolder[0].dismiss();
-                showReportSetup("Income");
+                sideMenuOpen = false;
+                render();
             }
         });
-        addMenuButton(menu, "↓ Expense report", new View.OnClickListener() {
+        header.addView(close, new LinearLayout.LayoutParams(dp(44), dp(44)));
+        menu.addView(header, matchWrapWithMargins(0, 0, 0, dp(10)));
+        addDrawerButton(menu, "↑ Income report", drawerReport("Income"));
+        addDrawerButton(menu, "↓ Expense report", drawerReport("Expense"));
+        addDrawerButton(menu, "▣ Tax flagged report", drawerReport("Tax"));
+        addDrawerButton(menu, "↗ Investment report", drawerReport("Investments"));
+        addDrawerButton(menu, "Reset all data", new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                if (dialogHolder[0] != null) dialogHolder[0].dismiss();
-                showReportSetup("Expense");
-            }
-        });
-        addMenuButton(menu, "▣ Tax flagged report", new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (dialogHolder[0] != null) dialogHolder[0].dismiss();
-                showReportSetup("Tax");
-            }
-        });
-        addMenuButton(menu, "↗ Investment report", new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (dialogHolder[0] != null) dialogHolder[0].dismiss();
-                showReportSetup("Investments");
-            }
-        });
-        addMenuButton(menu, "Reset all data", new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                if (dialogHolder[0] != null) dialogHolder[0].dismiss();
+                sideMenuOpen = false;
+                render();
                 showResetDataDialog();
             }
         });
+    }
 
-        dialogHolder[0] = showStyledDialog(menu, "Close", null, BLUE, null, null);
+    private View.OnClickListener drawerReport(final String reportType) {
+        return new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                sideMenuOpen = false;
+                render();
+                showReportSetup(reportType);
+            }
+        };
+    }
+
+    private void addDrawerButton(LinearLayout menu, String title, View.OnClickListener listener) {
+        Button button = outlineButton(title);
+        button.setGravity(Gravity.CENTER_VERTICAL);
+        button.setTextColor(INK);
+        button.setOnClickListener(listener);
+        menu.addView(button, matchWrapWithMargins(0, dp(7), 0, 0));
+    }
+
+    private void showMainMenu() {
+        sideMenuOpen = true;
+        render();
     }
 
     private void addMenuButton(LinearLayout menu, String title, View.OnClickListener listener) {
@@ -763,7 +795,20 @@ public class MainActivity extends Activity {
             makeCardNavigate(emptyGoal, 5);
             content.addView(emptyGoal);
         } else {
-            for (Goal goal : goals) content.addView(goalCard(goal, country.currency, false));
+            boolean hasActive = false;
+            for (Goal goal : goals) {
+                if (goal.currentAmount < goal.targetAmount) {
+                    content.addView(goalCard(goal, country.currency, false));
+                    hasActive = true;
+                }
+            }
+            if (!hasActive) content.addView(cardWith(emptyText("No goals in progress.")));
+            boolean hasCompleted = false;
+            for (Goal goal : goals) if (goal.currentAmount >= goal.targetAmount) hasCompleted = true;
+            if (hasCompleted) {
+                addSectionTitle("Completed Goals");
+                for (Goal goal : goals) if (goal.currentAmount >= goal.targetAmount) content.addView(goalCard(goal, country.currency, false));
+            }
         }
     }
 
@@ -795,7 +840,7 @@ public class MainActivity extends Activity {
         List<Entry> entries = db.entriesSince(selectedCountryId, fiveYearsAgo());
         if (selectedEntryDay.length() == 0) selectedEntryDay = today();
         if (selectedEntryReportType.length() == 0) selectedEntryReportType = "Expense";
-        List<PendingRecurringEntry> pendingRecurring = pendingRecurringEntries(entries);
+        List<PendingRecurringEntry> pendingRecurring = pendingRecurringForDate(pendingRecurringEntries(entries), selectedEntryDay);
         if (!pendingRecurring.isEmpty()) content.addView(pendingRecurringCard(pendingRecurring, country));
         content.addView(dailyEntryReport(entries, country));
     }
@@ -811,13 +856,14 @@ public class MainActivity extends Activity {
             for (int occurrence = 1; occurrence <= limit; occurrence++) {
                 String occurrenceDate = recurringOccurrenceDate(entry, occurrence);
                 if (occurrenceDate.length() == 0) continue;
-                if (occurrenceDate.compareTo(cutoffDate) > 0) break;
                 if (db.recurringOccurrenceExists(selectedCountryId, entry, occurrenceDate)) continue;
                 PendingRecurringEntry pending = new PendingRecurringEntry();
                 pending.template = entry;
                 pending.date = occurrenceDate;
                 pending.occurrence = occurrence;
+                pending.approvable = occurrenceDate.compareTo(cutoffDate) <= 0;
                 result.add(pending);
+                if (!pending.approvable) break;
             }
         }
         Collections.sort(result, new Comparator<PendingRecurringEntry>() {
@@ -831,6 +877,14 @@ public class MainActivity extends Activity {
         return result;
     }
 
+    private List<PendingRecurringEntry> pendingRecurringForDate(List<PendingRecurringEntry> entries, String date) {
+        List<PendingRecurringEntry> result = new ArrayList<PendingRecurringEntry>();
+        for (PendingRecurringEntry entry : entries) {
+            if (date.equals(entry.date)) result.add(entry);
+        }
+        return result;
+    }
+
     private LinearLayout pendingRecurringCard(List<PendingRecurringEntry> pendingRecurring, Country country) {
         LinearLayout card = card();
         card.setBackground(round(Color.rgb(242, 246, 251), dp(18), Color.rgb(211, 221, 234)));
@@ -839,7 +893,7 @@ public class MainActivity extends Activity {
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.addView(text("Repeating entries to confirm", 17, Typeface.BOLD, INK));
-        copy.addView(text("These are grey until you confirm the money was received or spent.", 12, Typeface.NORMAL, MUTED));
+        copy.addView(text("Upcoming terms are shown muted and affect balances only after approval.", 12, Typeface.NORMAL, MUTED));
         header.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         card.addView(header);
         for (PendingRecurringEntry pending : pendingRecurring) {
@@ -854,30 +908,61 @@ public class MainActivity extends Activity {
         final int accent = income ? GREEN : CORAL;
         LinearLayout row = horizontal();
         row.setPadding(dp(10), dp(10), dp(10), dp(10));
-        row.setBackground(round(Color.rgb(248, 250, 253), dp(14), Color.rgb(220, 226, 236)));
+        int fill = pending.approvable ? Color.rgb(248, 250, 253) : Color.rgb(252, 253, 255);
+        int stroke = pending.approvable ? Color.rgb(220, 226, 236) : Color.rgb(228, 232, 238);
+        row.setBackground(round(fill, dp(14), stroke));
         row.addView(iconBubble(db.categoryIcon(selectedCountryId, template.category), MUTED, Color.rgb(232, 236, 243)));
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.addView(text(template.title, 15, Typeface.BOLD, INK));
-        copy.addView(text(dayHeader(pending.date) + " · " + template.accountName + " · " + repeatCompactLabel(template), 11, Typeface.NORMAL, MUTED));
+        copy.addView(text((pending.approvable ? "Ready: " : "Upcoming: ") + dayHeader(pending.date) + " · " + template.accountName + " · " + repeatCompactLabel(template), 11, Typeface.NORMAL, MUTED));
         row.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         LinearLayout action = new LinearLayout(this);
         action.setOrientation(LinearLayout.VERTICAL);
         TextView amount = text((income ? "+" : "-") + money(template.amount, country.currency), 13, Typeface.BOLD, MUTED);
         amount.setGravity(Gravity.END);
         action.addView(amount);
-        Button confirm = outlineButton(income ? "Received" : "Incurred");
-        confirm.setTextColor(accent);
+        Button edit = outlineButton("Edit");
+        edit.setTextSize(11);
+        edit.setTextColor(BLUE);
+        edit.setBackground(round(tint(BLUE, 0.07f), dp(14), tint(BLUE, 0.24f)));
+        edit.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                showEntryDialog(template.type, template);
+            }
+        });
+        action.addView(edit, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34)));
+        Button confirm = outlineButton(pending.approvable ? (income ? "Received" : "Incurred") : "Waiting");
+        confirm.setTextColor(pending.approvable ? accent : MUTED);
         confirm.setTextSize(11);
-        confirm.setBackground(round(tint(accent, 0.08f), dp(14), tint(accent, 0.24f)));
+        confirm.setEnabled(pending.approvable);
+        confirm.setAlpha(pending.approvable ? 1f : 0.55f);
+        confirm.setBackground(round(pending.approvable ? tint(accent, 0.08f) : Color.rgb(245, 247, 250),
+                dp(14), pending.approvable ? tint(accent, 0.24f) : Color.rgb(226, 231, 238)));
         confirm.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                db.addEntry(selectedCountryId, template.type, pending.date, template.title, template.amount,
-                        template.category, "", template.accountId, template.notes, "",
-                        template.taxFlag, template.taxAmount, template.taxTitle, 0, "", 0);
-                toast(template.type + " confirmed.");
-                render();
+                if (!pending.approvable) {
+                    toast("This recurring entry can be approved on or after " + pending.date + ".");
+                    return;
+                }
+                final Runnable save = new Runnable() {
+                    @Override
+                    public void run() {
+                        db.addEntry(selectedCountryId, template.type, pending.date, template.title, template.amount,
+                                template.category, "", template.accountId, template.notes, "",
+                                template.taxFlag, template.taxAmount, template.taxTitle, 0, "", 0);
+                        toast(template.type + " confirmed.");
+                        render();
+                    }
+                };
+                Account account = db.account(template.accountId);
+                if ("Expense".equals(template.type) && needsOutflowConfirmation(account, template.amount)) {
+                    showBalanceConfirmation("Confirm recurring expense", outflowWarning(account, template.amount), CORAL, save);
+                    return;
+                }
+                save.run();
             }
         });
         action.addView(confirm, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)));
@@ -916,26 +1001,47 @@ public class MainActivity extends Activity {
             content.addView(cardWith(emptyText("No fixed deposits, recurring deposits, or market linked funds yet.")));
             return;
         }
+        boolean hasActive = false;
         for (final Investment investment : investments) {
-            LinearLayout card = card();
-            LinearLayout title = horizontal();
-            title.addView(iconBubble(investmentIcon(investment.type)));
-            LinearLayout details = new LinearLayout(this);
-            details.setOrientation(LinearLayout.VERTICAL);
-            details.addView(text(investment.title, 18, Typeface.BOLD, INK));
-            details.addView(text(investment.type + " · " + investment.accountName, 13, Typeface.NORMAL, MUTED));
-            title.addView(details, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-            card.addView(title);
-            card.addView(metricRow("Invested principal", money(investment.principal, country.currency), INK));
-            card.addView(metricRow("Present value", money(investment.currentValue, country.currency), TEAL));
-            card.addView(metricRow("Maturity value", money(investment.maturityValue, country.currency), GREEN));
-            card.addView(text("Opened: " + investment.startDate + " · Maturity: " + blankAsDash(investment.maturityDate), 12, Typeface.NORMAL, MUTED));
-            if (!"Market Linked Fund".equals(investment.type)) {
-                card.addView(text("Instructions: " + investment.maturityAction + " · Status: " + investment.status, 12, Typeface.NORMAL, MUTED));
-            } else {
-                card.addView(text("Status: " + investment.status, 12, Typeface.NORMAL, MUTED));
+            if (!"Matured".equals(investment.status)) {
+                content.addView(investmentCard(investment, country));
+                hasActive = true;
             }
-            if (investment.notes.length() > 0) card.addView(text(investment.notes, 13, Typeface.NORMAL, INK));
+        }
+        if (!hasActive) content.addView(cardWith(emptyText("No investments in progress.")));
+        boolean hasCompleted = false;
+        for (Investment investment : investments) {
+            if ("Matured".equals(investment.status)) hasCompleted = true;
+        }
+        if (hasCompleted) {
+            addSectionTitle("Completed investments");
+            for (final Investment investment : investments) {
+                if ("Matured".equals(investment.status)) content.addView(investmentCard(investment, country));
+            }
+        }
+    }
+
+    private LinearLayout investmentCard(final Investment investment, final Country country) {
+        LinearLayout card = card();
+        LinearLayout title = horizontal();
+        title.addView(iconBubble(investmentIcon(investment.type)));
+        LinearLayout details = new LinearLayout(this);
+        details.setOrientation(LinearLayout.VERTICAL);
+        details.addView(text(investment.title, 18, Typeface.BOLD, INK));
+        details.addView(text(investment.type + " · " + investment.accountName, 13, Typeface.NORMAL, MUTED));
+        title.addView(details, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        card.addView(title);
+        card.addView(metricRow("Invested principal", money(investment.principal, country.currency), INK));
+        card.addView(metricRow("Present value", money(investment.currentValue, country.currency), TEAL));
+        card.addView(metricRow("Maturity value", money(investment.maturityValue, country.currency), GREEN));
+        card.addView(text("Opened: " + investment.startDate + " · Maturity: " + blankAsDash(investment.maturityDate), 12, Typeface.NORMAL, MUTED));
+        if (!"Market Linked Fund".equals(investment.type)) {
+            card.addView(text("Instructions: " + investment.maturityAction + " · Status: " + investment.status, 12, Typeface.NORMAL, MUTED));
+        } else {
+            card.addView(text("Status: " + investment.status, 12, Typeface.NORMAL, MUTED));
+        }
+        if (investment.notes.length() > 0) card.addView(text(investment.notes, 13, Typeface.NORMAL, INK));
+        if (!"Matured".equals(investment.status)) {
             LinearLayout actions = horizontal();
             Button editAmount = outlineButton("Edit amount");
             editAmount.setOnClickListener(new View.OnClickListener() {
@@ -955,11 +1061,7 @@ public class MainActivity extends Activity {
                 });
                 actions.addView(addFunds, smallActionParams());
             }
-            Button mature = outlineButton("✓ Mature");
-            boolean canMature = "Market Linked Fund".equals(investment.type)
-                    || (investment.maturityDate.length() > 0 && investment.maturityDate.compareTo(today()) <= 0);
-            mature.setEnabled(canMature);
-            mature.setAlpha(canMature ? 1f : 0.45f);
+            Button mature = outlineButton("Close");
             mature.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
@@ -969,41 +1071,40 @@ public class MainActivity extends Activity {
             });
             actions.addView(mature, smallActionParams());
             card.addView(actions);
-            Button delete = outlineButton("Delete");
-            delete.setTextColor(CORAL);
-            delete.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    confirmDelete("Delete this investment?", new Runnable() {
-                        @Override
-                        public void run() {
-                            db.deleteInvestment(investment);
-                            render();
-                        }
-                    });
-                }
-            });
-            card.addView(delete, smallActionParams());
-            content.addView(card);
         }
+        Button delete = outlineButton("Delete");
+        delete.setTextColor(CORAL);
+        delete.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                confirmDelete("Delete this investment?", new Runnable() {
+                    @Override
+                    public void run() {
+                        db.deleteInvestment(investment);
+                        render();
+                    }
+                });
+            }
+        });
+        card.addView(delete, smallActionParams());
+        return card;
     }
 
     private void showBalances() {
         final Country country = db.getCountry(selectedCountryId);
-        addActionHeader("Account Balances", "＋ Add account", new View.OnClickListener() {
+        addActionHeader("Accounts", "＋ Add account", new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 showAccountDialog();
             }
         });
-        content.addView(accountBalanceCard(country));
+        content.addView(homeAccountSelectionCard(country));
 
         List<Account> accounts = db.accounts(selectedCountryId);
         if (accounts.isEmpty()) {
             content.addView(cardWith(emptyText("No accounts yet.")));
             return;
         }
-        addSectionTitle("Accounts");
         for (final Account account : accounts) {
             double goalReserved = db.goalReservedForAccount(account.id);
             LinearLayout card = card();
@@ -1014,31 +1115,15 @@ public class MainActivity extends Activity {
             details.addView(text(account.name, 18, Typeface.BOLD, INK));
             details.addView(text(account.type + " · " + currencySymbol(account.currency), 13, Typeface.NORMAL, MUTED));
             row.addView(details, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-            card.addView(row);
-            card.addView(text(money(account.balance, account.currency), 24, Typeface.BOLD, account.balance >= 0 ? TEAL : CORAL));
-            if (goalReserved > 0) {
-                card.addView(metricRow("Set aside for goals", money(goalReserved, account.currency), BLUE));
-                card.addView(metricRow("Available", money(account.balance - goalReserved, account.currency), account.balance - goalReserved >= 0 ? TEAL : CORAL));
-            }
-            LinearLayout actions = horizontal();
-            Button edit = outlineButton("Edit");
+            Button edit = tinyIconButton("✎", BLUE);
             edit.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
                     showAccountDialog(account);
                 }
             });
-            actions.addView(edit, smallActionParams());
-            Button history = outlineButton("Entries");
-            history.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    showAccountEntriesDialog(account);
-                }
-            });
-            actions.addView(history, smallActionParams());
-            Button delete = outlineButton("Delete");
-            delete.setTextColor(CORAL);
+            row.addView(edit, tinyActionParams());
+            Button delete = tinyIconButton("🗑", CORAL);
             delete.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View view) {
@@ -1056,10 +1141,46 @@ public class MainActivity extends Activity {
                     });
                 }
             });
-            actions.addView(delete, smallActionParams());
-            card.addView(actions);
+            row.addView(delete, tinyActionParams());
+            card.addView(row);
+            card.addView(text(money(account.balance, account.currency), 24, Typeface.BOLD, account.balance >= 0 ? TEAL : CORAL));
+            if (goalReserved > 0) {
+                card.addView(metricRow("Set aside for goals", money(goalReserved, account.currency), BLUE));
+                card.addView(metricRow("Available", money(account.balance - goalReserved, account.currency), account.balance - goalReserved >= 0 ? TEAL : CORAL));
+            }
+            Button history = outlineButton("Entries");
+            history.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View view) {
+                    showAccountEntriesDialog(account);
+                }
+            });
+            card.addView(history, smallActionParams());
             content.addView(card);
         }
+    }
+
+    private LinearLayout homeAccountSelectionCard(final Country country) {
+        LinearLayout card = card();
+        int accent = currencyColor(country);
+        card.setBackground(round(tint(accent, 0.07f), dp(8), tint(accent, 0.22f)));
+        card.setClickable(true);
+        card.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                showAccountSelectionDialog(country);
+            }
+        });
+        LinearLayout row = horizontal();
+        row.addView(iconBubble("▣", accent, tint(accent, 0.12f)));
+        LinearLayout copy = new LinearLayout(this);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        copy.addView(text("Accounts shown on Home", 16, Typeface.BOLD, INK));
+        copy.addView(text("Tap to choose which accounts feed the Home balance.", 12, Typeface.NORMAL, MUTED));
+        row.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        row.addView(text("›", 24, Typeface.BOLD, accent));
+        card.addView(row);
+        return card;
     }
 
     private void showAccountEntriesDialog(Account account) {
@@ -1104,7 +1225,22 @@ public class MainActivity extends Activity {
             content.addView(cardWith(emptyText("No goals yet.")));
             return;
         }
-        for (Goal goal : goals) content.addView(goalCard(goal, country.currency, true));
+        boolean hasActive = false;
+        for (Goal goal : goals) {
+            if (goal.currentAmount < goal.targetAmount) {
+                content.addView(goalCard(goal, country.currency, true));
+                hasActive = true;
+            }
+        }
+        if (!hasActive) content.addView(cardWith(emptyText("No goals in progress.")));
+        boolean hasCompleted = false;
+        for (Goal goal : goals) if (goal.currentAmount >= goal.targetAmount) hasCompleted = true;
+        if (hasCompleted) {
+            addSectionTitle("Completed goals");
+            for (Goal goal : goals) {
+                if (goal.currentAmount >= goal.targetAmount) content.addView(goalCard(goal, country.currency, true));
+            }
+        }
     }
 
     private void showTransfers() {
@@ -1162,31 +1298,29 @@ public class MainActivity extends Activity {
         LinearLayout header = horizontal();
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.addView(text("Categories & Icons", 22, Typeface.BOLD, INK), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        Button remove = outlineButton("Remove");
-        remove.setOnClickListener(new View.OnClickListener() {
+        Button edit = tinyIconButton("✎", BLUE);
+        edit.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                showRemoveCategoryDialog();
+                showCategorySelectionDialog(false);
             }
         });
-        header.addView(remove, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)));
-        Button add = primaryButton("＋ Add");
-        add.setOnClickListener(new View.OnClickListener() {
+        header.addView(edit, tinyActionParams());
+        Button delete = tinyIconButton("🗑", CORAL);
+        delete.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                showCategoryDialog(null);
+                showCategorySelectionDialog(true);
             }
         });
-        LinearLayout.LayoutParams addParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44));
-        addParams.setMargins(dp(8), 0, 0, 0);
-        header.addView(add, addParams);
+        header.addView(delete, tinyActionParams());
         content.addView(header, matchWrap());
         content.addView(spacer(10));
 
         List<Category> categories = db.categories(selectedCountryId);
         LinearLayout split = horizontal();
-        LinearLayout incomeColumn = categoryColumn("Income", GREEN);
-        LinearLayout expenseColumn = categoryColumn("Expense", CORAL);
+        LinearLayout incomeColumn = categoryColumn("Income", GREEN, "Income");
+        LinearLayout expenseColumn = categoryColumn("Expense", CORAL, "Expense");
         boolean hasIncome = false;
         boolean hasExpense = false;
         for (final Category category : categories) {
@@ -1213,14 +1347,23 @@ public class MainActivity extends Activity {
         content.addView(split, matchWrap());
     }
 
-    private LinearLayout categoryColumn(String title, int color) {
+    private LinearLayout categoryColumn(String title, int color, final String type) {
         LinearLayout column = new LinearLayout(this);
         column.setOrientation(LinearLayout.VERTICAL);
         column.setPadding(dp(8), dp(8), dp(8), dp(8));
         column.setBackground(round(tint(color, 0.06f), dp(8), tint(color, 0.22f)));
+        LinearLayout header = horizontal();
         TextView heading = text(title, 17, Typeface.BOLD, color);
-        heading.setGravity(Gravity.CENTER);
-        column.addView(heading, matchWrapWithMargins(0, 0, 0, dp(8)));
+        header.addView(heading, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        Button add = tinyIconButton("＋", color);
+        add.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                showCategoryDialog(null, type);
+            }
+        });
+        header.addView(add, tinyActionParams());
+        column.addView(header, matchWrapWithMargins(0, 0, 0, dp(8)));
         return column;
     }
 
@@ -1238,32 +1381,56 @@ public class MainActivity extends Activity {
         name.setGravity(Gravity.CENTER);
         name.setSingleLine(false);
         tile.addView(name, matchWrap());
-        Button edit = outlineButton("Edit");
-        edit.setOnClickListener(new View.OnClickListener() {
+        return tile;
+    }
+
+    private void showCategorySelectionDialog(final boolean deleteMode) {
+        if (db.categories(selectedCountryId).isEmpty()) {
+            toast("No categories available.");
+            return;
+        }
+        LinearLayout form = form();
+        final Spinner type = spinner(new String[]{"Income", "Expense"});
+        final List<Category>[] visibleCategories = new List[]{db.categories(selectedCountryId, "Income")};
+        final Spinner category = spinner(categoryRemoveLabels(visibleCategories[0]));
+        type.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
-            public void onClick(View view) {
-                showCategoryDialog(category);
+            public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
+                visibleCategories[0] = db.categories(selectedCountryId, type.getSelectedItem().toString());
+                resetSpinner(category, categoryRemoveLabels(visibleCategories[0]));
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
             }
         });
-        tile.addView(edit, matchWrapWithMargins(0, dp(6), 0, 0));
-        if (category.countryId != 0) {
-            Button delete = outlineButton("Delete");
-            delete.setTextColor(CORAL);
-            delete.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    confirmDelete("Delete this custom category?", new Runnable() {
-                        @Override
-                        public void run() {
-                            db.deleteById("categories", category.id);
-                            render();
-                        }
-                    });
+        int accent = deleteMode ? CORAL : BLUE;
+        addDialogHero(form, deleteMode ? "🗑" : "✎",
+                deleteMode ? "Delete category" : "Edit category",
+                "Choose income or expense first, then select the category.", accent);
+        form.addView(dialogSection("Category type", type, category));
+        showStyledDialog(form, "Cancel", deleteMode ? "Delete" : "Edit", accent, null, new DialogSubmit() {
+            @Override
+            public boolean submit() {
+                if (visibleCategories[0].isEmpty()) {
+                    toast("No " + type.getSelectedItem().toString().toLowerCase(Locale.US) + " categories available.");
+                    return false;
                 }
-            });
-            tile.addView(delete, matchWrapWithMargins(0, dp(6), 0, 0));
-        }
-        return tile;
+                final Category selected = visibleCategories[0].get(category.getSelectedItemPosition());
+                if (!deleteMode) {
+                    showCategoryDialog(selected, selected.type);
+                    return true;
+                }
+                confirmDelete("Delete this category?", new Runnable() {
+                    @Override
+                    public void run() {
+                        db.removeCategory(selectedCountryId, selected);
+                        render();
+                    }
+                });
+                return true;
+            }
+        });
     }
 
     private void showRemoveCategoryDialog() {
@@ -1288,9 +1455,6 @@ public class MainActivity extends Activity {
     }
 
     private LinearLayout accountBalanceCard(final Country country) {
-        final TextView combinedTotal = text("", 24, Typeface.BOLD, INK);
-        final TextView combinedReserved = text("", 14, Typeface.BOLD, BLUE);
-        final TextView combinedAvailable = text("", 18, Typeface.BOLD, TEAL);
         int accent = currencyColor(country);
         LinearLayout card = card();
         card.setClickable(true);
@@ -1298,7 +1462,8 @@ public class MainActivity extends Activity {
         card.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                showAccountSelectionDialog(country);
+                selectedTab = 4;
+                render();
             }
         });
         LinearLayout header = horizontal();
@@ -1307,7 +1472,7 @@ public class MainActivity extends Activity {
         LinearLayout copy = new LinearLayout(this);
         copy.setOrientation(LinearLayout.VERTICAL);
         copy.addView(text("Account balances", 16, Typeface.BOLD, INK));
-        copy.addView(text("Tap to choose which accounts are included.", 12, Typeface.NORMAL, MUTED));
+        copy.addView(text("Tap to manage accounts.", 12, Typeface.NORMAL, MUTED));
         LinearLayout.LayoutParams copyParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
         copyParams.setMargins(dp(10), 0, 0, 0);
         header.addView(copy, copyParams);
@@ -1323,12 +1488,16 @@ public class MainActivity extends Activity {
             return card;
         }
         card.addView(spacer(10));
-        card.addView(text(selectedAccountCountText(accounts), 12, Typeface.BOLD, accent));
-        updateSelectedAccountSummary(combinedTotal, combinedReserved, combinedAvailable, country);
-        card.addView(combinedTotal);
-        card.addView(combinedReserved);
-        card.addView(combinedAvailable);
-        card.addView(text("All-currency balances: " + db.allCountriesAccountSummary(), 12, Typeface.NORMAL, MUTED));
+        double totalValue = db.selectedAccountTotal(selectedAccountIds);
+        double reservedValue = db.selectedGoalReserved(selectedAccountIds);
+        double availableValue = totalValue - reservedValue;
+        card.addView(metricRow("Total balance in account", money(totalValue, country.currency), INK));
+        card.addView(metricRow("Money set aside for goals", money(reservedValue, country.currency), BLUE));
+        TextView available = text("Available " + money(availableValue, country.currency), 28, Typeface.BOLD, availableValue >= 0 ? TEAL : CORAL);
+        available.setPadding(0, dp(8), 0, dp(4));
+        card.addView(available);
+        String other = db.otherCountriesAvailableSummary(selectedCountryId);
+        if (other.length() > 0) card.addView(text("Other currency available: " + other, 12, Typeface.BOLD, MUTED));
         return card;
     }
 
@@ -1546,7 +1715,8 @@ public class MainActivity extends Activity {
         form.addView(repeatCount);
         form.addView(bill, matchWrap());
 
-        showStyledDialog(form, "Cancel", "Save", accent, null, new DialogSubmit() {
+        final AlertDialog[] dialogHolder = new AlertDialog[1];
+        dialogHolder[0] = showStyledDialog(form, "Cancel", "Save", accent, null, new DialogSubmit() {
             @Override
             public boolean submit() {
                 double value = parseDouble(amount.getText().toString());
@@ -1570,18 +1740,40 @@ public class MainActivity extends Activity {
                 String repeat = repeatUnit.getSelectedItemPosition() == 0 ? "" : repeatUnit.getSelectedItem().toString();
                 int fixedRepeats = repeatUnit.getSelectedItemPosition() == 0 ? 0 : Math.max(0, (int) parseDouble(repeatCount.getText().toString()));
 
-                if (existing == null) {
-                    db.addEntry(selectedCountryId, entryType, clean(date.getText().toString(), today()),
-                            clean(title.getText().toString(), "Untitled"), value, selectedCategory.name, "",
-                            selectedAccount.id, notes.getText().toString().trim(), pendingBillUri,
-                            taxFlag, taxAmount, taxTitle.trim(), repeatInterval, repeat, fixedRepeats);
-                } else {
-                    db.updateEntry(existing.id, entryType, clean(date.getText().toString(), today()),
-                            clean(title.getText().toString(), "Untitled"), value, selectedCategory.name, "",
-                            selectedAccount.id, notes.getText().toString().trim(), pendingBillUri,
-                            taxFlag, taxAmount, taxTitle.trim(), repeatInterval, repeat, fixedRepeats);
+                final String finalDate = clean(date.getText().toString(), today());
+                final String finalTitle = clean(title.getText().toString(), "Untitled");
+                final String finalCategory = selectedCategory.name;
+                final Account finalAccount = selectedAccount;
+                final double finalValue = value;
+                final boolean finalTaxFlag = taxFlag;
+                final double finalTaxAmount = taxAmount;
+                final String finalTaxTitle = taxTitle.trim();
+                final int finalRepeatInterval = repeatInterval;
+                final String finalRepeat = repeat;
+                final int finalFixedRepeats = fixedRepeats;
+                final Runnable save = new Runnable() {
+                    @Override
+                    public void run() {
+                        if (existing == null) {
+                            db.addEntry(selectedCountryId, entryType, finalDate,
+                                    finalTitle, finalValue, finalCategory, "",
+                                    finalAccount.id, notes.getText().toString().trim(), pendingBillUri,
+                                    finalTaxFlag, finalTaxAmount, finalTaxTitle, finalRepeatInterval, finalRepeat, finalFixedRepeats);
+                        } else {
+                            db.updateEntry(existing.id, entryType, finalDate,
+                                    finalTitle, finalValue, finalCategory, "",
+                                    finalAccount.id, notes.getText().toString().trim(), pendingBillUri,
+                                    finalTaxFlag, finalTaxAmount, finalTaxTitle, finalRepeatInterval, finalRepeat, finalFixedRepeats);
+                        }
+                        if (dialogHolder[0] != null) dialogHolder[0].dismiss();
+                        render();
+                    }
+                };
+                if ("Expense".equals(entryType) && needsOutflowConfirmation(finalAccount, finalValue)) {
+                    showBalanceConfirmation("Confirm expense", outflowWarning(finalAccount, finalValue), CORAL, save);
+                    return false;
                 }
-                render();
+                save.run();
                 return true;
             }
         });
@@ -1589,14 +1781,26 @@ public class MainActivity extends Activity {
 
     private void showTaxDialog(final CheckBox checkBox, EditText amountInput, EditText titleInput, final String[] taxValues) {
         LinearLayout form = form();
-        Country country = db.getCountry(selectedCountryId);
+        final Country country = db.getCountry(selectedCountryId);
         final double totalAmount = parseDouble(amountInput.getText().toString());
         addDialogHero(form, "▣", "Tax details", "Specify the amount out of the total to show for tax purpose and the proper report description.", GOLD);
-        final EditText taxAmount = input("Tax amount", amountInput.getText().toString(), decimalInput());
-        TextView total = text("/ " + money(totalAmount, country.currency) + " total", 15, Typeface.BOLD, GOLD);
-        total.setGravity(Gravity.CENTER_VERTICAL);
-        final EditText taxTitle = input("Tax report description", titleInput.getText().toString(), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        form.addView(dialogSection("Amount to show", dialogFieldRow(taxAmount, total), taxTitle));
+        final LinearLayout taxRows = new LinearLayout(this);
+        taxRows.setOrientation(LinearLayout.VERTICAL);
+        final List<EditText> taxAmounts = new ArrayList<EditText>();
+        final List<EditText> taxTitles = new ArrayList<EditText>();
+        addTaxLineRow(taxRows, taxAmounts, taxTitles,
+                taxValues[0].length() == 0 ? amountInput.getText().toString() : taxValues[0],
+                taxValues[1].length() == 0 ? titleInput.getText().toString() : taxValues[1],
+                country);
+        Button addLine = outlineButton("＋ Add tax field");
+        addLine.setTextColor(GOLD);
+        addLine.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                addTaxLineRow(taxRows, taxAmounts, taxTitles, "", "", country);
+            }
+        });
+        form.addView(dialogSection("Amount to show", taxRows, text("/ " + money(totalAmount, country.currency) + " total", 15, Typeface.BOLD, GOLD), addLine));
 
         showStyledDialog(form, "Cancel", "Apply", GOLD, new DialogCancel() {
             @Override
@@ -1606,11 +1810,30 @@ public class MainActivity extends Activity {
         }, new DialogSubmit() {
             @Override
             public boolean submit() {
-                taxValues[0] = taxAmount.getText().toString().trim();
-                taxValues[1] = taxTitle.getText().toString().trim();
+                double sum = 0;
+                StringBuilder description = new StringBuilder();
+                for (int i = 0; i < taxAmounts.size(); i++) {
+                    double lineAmount = parseDouble(taxAmounts.get(i).getText().toString());
+                    String lineTitle = clean(taxTitles.get(i).getText().toString(), titleInput.getText().toString());
+                    if (lineAmount <= 0) continue;
+                    sum += lineAmount;
+                    if (description.length() > 0) description.append("; ");
+                    description.append(lineTitle).append(" (").append(money(lineAmount, country.currency)).append(")");
+                }
+                taxValues[0] = moneyPlain(sum);
+                taxValues[1] = description.length() == 0 ? titleInput.getText().toString().trim() : description.toString();
                 return true;
             }
         });
+    }
+
+    private void addTaxLineRow(LinearLayout taxRows, List<EditText> taxAmounts, List<EditText> taxTitles,
+                               String amount, String title, Country country) {
+        EditText taxAmount = input("Tax amount " + currencySymbol(country.currency), amount, decimalInput());
+        EditText taxTitle = input("Tax description", title, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        taxRows.addView(dialogFieldRow(taxAmount, taxTitle), matchWrapWithMargins(0, taxAmounts.isEmpty() ? 0 : dp(8), 0, 0));
+        taxAmounts.add(taxAmount);
+        taxTitles.add(taxTitle);
     }
 
     private void showBudgetDialog() {
@@ -1684,6 +1907,10 @@ public class MainActivity extends Activity {
     }
 
     private void showInvestmentDialog() {
+        showInvestmentDialog(null);
+    }
+
+    private void showInvestmentDialog(final InvestmentDraft draft) {
         final Country country = db.getCountry(selectedCountryId);
         final List<Account> accounts = db.accounts(selectedCountryId);
         if (accounts.isEmpty()) {
@@ -1692,12 +1919,14 @@ public class MainActivity extends Activity {
         }
         LinearLayout form = form();
         final Spinner type = spinner(new String[]{"Fixed Deposit", "Recurring Deposit", "Market Linked Fund"});
-        final EditText title = input("Title", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        final EditText title = input("Title", draft == null ? "" : draft.title, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         final Spinner account = spinner(accountNames(accounts));
-        final EditText principal = input("Principal amount in " + currencySymbol(country.currency), "", decimalInput());
-        final EditText start = dateInput("Date of opening", today(), false);
-        final EditText maturity = dateInput("Date of maturity", "", true);
-        final EditText maturityValue = input("Value at maturity", "", decimalInput());
+        final EditText principal = input("Principal amount in " + currencySymbol(country.currency),
+                draft == null ? "" : moneyPlain(draft.principal), decimalInput());
+        final EditText start = dateInput("Date of opening", draft == null ? today() : draft.startDate, false);
+        final EditText maturity = dateInput("Date of maturity", draft == null ? "" : draft.maturityDate, true);
+        final EditText maturityValue = input("Value at maturity",
+                draft == null ? "" : moneyPlain(draft.maturityValue), decimalInput());
         final Spinner maturityAction = spinner(new String[]{"Return full maturity amount to linked account", "Reinvest principal only", "Reinvest principal plus interest"});
         final CheckBox recurring = new CheckBox(this);
         styleDialogCheckBox(recurring, "Repeating investment contribution");
@@ -1727,8 +1956,16 @@ public class MainActivity extends Activity {
         });
         recurring.setVisibility(View.GONE);
         repeatFrequency.setVisibility(View.GONE);
+        if (draft != null) {
+            setSpinnerToValue(type, draft.type);
+            setAccountSelection(account, accounts, draft.accountId);
+            if (draft.maturityAction.length() > 0) setSpinnerToValue(maturityAction, draft.maturityAction);
+            if (draft.notes.length() > 0) notes.setText(draft.notes);
+        }
 
-        addDialogHero(form, "↗", "Add investment", "Track principal, maturity and how money should return.", BLUE);
+        addDialogHero(form, "↗", draft == null ? "Add investment" : "Reinvest maturity",
+                draft == null ? "Track principal, maturity and how money should return."
+                        : "Review the pre-filled values, then save the new investment.", BLUE);
         form.addView(label("Investment type"));
         form.addView(type);
         form.addView(dialogSection("Investment details", title, principal));
@@ -1757,19 +1994,26 @@ public class MainActivity extends Activity {
                 if (maturityAmount <= 0) maturityAmount = presentValue;
                 final double finalMaturityAmount = maturityAmount;
                 final double finalPrincipalValue = principalValue;
+                final boolean reinvestedDraft = draft != null && draft.reinvested;
                 final Runnable save = new Runnable() {
                     @Override
                     public void run() {
+                        String storedNotes = investmentNotes(notes.getText().toString().trim(), recurring, repeatFrequency);
+                        if (reinvestedDraft && !storedNotes.contains("Created from maturity reinvestment")) {
+                            storedNotes = storedNotes.length() == 0
+                                    ? "Created from maturity reinvestment"
+                                    : storedNotes + "\nCreated from maturity reinvestment";
+                        }
                         db.addInvestment(selectedCountryId, type.getSelectedItem().toString(),
                                 clean(title.getText().toString(), "Investment"), accountId, finalPrincipalValue, presentValue, finalMaturityAmount,
                                 clean(start.getText().toString(), today()), maturity.getText().toString().trim(),
                                 "Market Linked Fund".equals(type.getSelectedItem().toString()) ? "" : maturityAction.getSelectedItem().toString(),
-                                investmentNotes(notes.getText().toString().trim(), recurring, repeatFrequency));
+                                storedNotes, !reinvestedDraft);
                         if (dialogHolder[0] != null) dialogHolder[0].dismiss();
                         render();
                     }
                 };
-                if (needsInvestmentBalanceConfirmation(selectedAccount, finalPrincipalValue)) {
+                if (!reinvestedDraft && needsInvestmentBalanceConfirmation(selectedAccount, finalPrincipalValue)) {
                     showBalanceConfirmation("Confirm investment",
                             investmentBalanceWarning(selectedAccount, finalPrincipalValue), BLUE, save);
                     return false;
@@ -1916,25 +2160,68 @@ public class MainActivity extends Activity {
 
     private void showMaturityDialog(final Investment investment) {
         LinearLayout form = form();
-        final EditText date = dateInput("Maturity processing date", investment.maturityDate.length() == 0 ? today() : investment.maturityDate, false);
-        final EditText maturityValue = input("Maturity value", moneyPlain(investment.maturityValue), decimalInput());
+        final Spinner closeTiming = spinner(new String[]{"On maturity", "Before maturity"});
+        final EditText date = dateInput("Processing date", investment.maturityDate.length() == 0 ? today() : investment.maturityDate, false);
+        final EditText maturityValue = input("Maturity value / money returned", moneyPlain(investment.maturityValue), decimalInput());
         final Spinner action = spinner(new String[]{"Return full maturity amount to linked account", "Reinvest principal only", "Reinvest principal plus interest"});
         setSpinnerToValue(action, investment.maturityAction);
-        addDialogHero(form, "↗", "Process maturity", "Reconfirm the instructions and linked account before applying maturity.", BLUE);
-        form.addView(dialogSection("Maturity", dialogFieldRow(date, maturityValue), text("Linked account: " + investment.accountName, 13, Typeface.BOLD, BLUE)));
+        closeTiming.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> adapterView, View view, int position, long id) {
+                action.setVisibility(position == 0 ? View.VISIBLE : View.GONE);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> adapterView) {
+            }
+        });
+        addDialogHero(form, "↗", "Close investment", "Choose whether this is closing on maturity or before maturity.", BLUE);
+        form.addView(dialogSection("Close type", closeTiming));
+        form.addView(dialogSection("Amount", dialogFieldRow(date, maturityValue), text("Linked account: " + investment.accountName, 13, Typeface.BOLD, BLUE)));
         form.addView(label("Instructions"));
         form.addView(action);
 
-        showStyledDialog(form, "Cancel", "Apply", BLUE, null, new DialogSubmit() {
+        final AlertDialog[] dialogHolder = new AlertDialog[1];
+        dialogHolder[0] = showStyledDialog(form, "Cancel", "Apply", BLUE, null, new DialogSubmit() {
             @Override
             public boolean submit() {
                 double value = parseDouble(maturityValue.getText().toString());
                 if (value <= 0) {
-                    toast("Enter maturity value.");
+                    toast(closeTiming.getSelectedItemPosition() == 0 ? "Enter maturity value." : "Enter money returned.");
                     return false;
                 }
-                db.processMaturity(investment, clean(date.getText().toString(), today()), value, action.getSelectedItem().toString());
+                String finalDate = clean(date.getText().toString(), today());
+                if (closeTiming.getSelectedItemPosition() == 1) {
+                    db.processEarlyInvestmentClose(investment, finalDate, value);
+                    render();
+                    return true;
+                }
+                String instruction = action.getSelectedItem().toString();
+                if ("Return full maturity amount to linked account".equals(instruction)) {
+                    db.processMaturity(investment, finalDate, value, instruction);
+                    render();
+                    return true;
+                }
+                double reinvestAmount = "Reinvest principal only".equals(instruction)
+                        ? Math.min(investment.principal, value) : value;
+                double returnedAmount = Math.max(0, value - reinvestAmount);
+                if (reinvestAmount <= 0) {
+                    toast("Enter an amount to reinvest.");
+                    return false;
+                }
+                db.processMaturityForReinvestmentChoice(investment, finalDate, value, instruction, returnedAmount);
+                InvestmentDraft draft = new InvestmentDraft();
+                draft.type = investment.type;
+                draft.title = investment.title + " reinvested";
+                draft.accountId = investment.accountId;
+                draft.principal = reinvestAmount;
+                draft.startDate = finalDate;
+                draft.maturityValue = reinvestAmount;
+                draft.maturityAction = instruction;
+                draft.reinvested = true;
+                if (dialogHolder[0] != null) dialogHolder[0].dismiss();
                 render();
+                showInvestmentDialog(draft);
                 return true;
             }
         });
@@ -1958,9 +2245,9 @@ public class MainActivity extends Activity {
         final EditText name = input("Account name", existing == null ? "" : existing.name, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         final Spinner type = spinner(new String[]{"Bank", "Cash", "Credit Card", "Loan", "Wallet", "Brokerage", "Other"});
         if (existing != null) setSpinnerToValue(type, existing.type);
-        final EditText balance = input(existing == null ? "Opening balance" : "Current balance", existing == null ? "0" : moneyPlain(existing.balance), signedDecimalInput());
-        final Spinner currency = spinner(currencyLabels());
-        setSpinnerToPrefix(currency, existing == null ? country.currency : existing.currency);
+        final EditText balance = input(existing == null ? "Starting balance / current amount" : "Current balance",
+                existing == null ? "" : moneyPlain(existing.balance), signedDecimalInput());
+        final AutoCompleteTextView currency = currencySearchInput(existing == null ? country.currency : existing.currency);
         addDialogHero(form, "▣", existing == null ? "Add account" : "Edit account", "Create a place where your money actually sits.", BLUE);
         form.addView(dialogSection("Account details", name, dialogFieldRow(balance, type), currency));
 
@@ -2040,9 +2327,7 @@ public class MainActivity extends Activity {
                         render();
                     }
                 };
-                if (needsGoalBalanceConfirmation(selectedAccount, currentAmount, existing == null ? 0 : existing.id)) {
-                    showBalanceConfirmation("Confirm goal money",
-                            goalBalanceWarning(selectedAccount, currentAmount, existing == null ? 0 : existing.id), TEAL, save);
+                if (denyGoalIfUnavailable(selectedAccount, currentAmount, existing == null ? 0 : existing.id)) {
                     return false;
                 }
                 save.run();
@@ -2082,9 +2367,7 @@ public class MainActivity extends Activity {
                         render();
                     }
                 };
-                if (needsGoalBalanceConfirmation(selectedAccount, nextAmount, goal.id)) {
-                    showBalanceConfirmation("Confirm goal money",
-                            goalBalanceWarning(selectedAccount, nextAmount, goal.id), TEAL, save);
+                if (denyGoalIfUnavailable(selectedAccount, nextAmount, goal.id)) {
                     return false;
                 }
                 save.run();
@@ -2116,9 +2399,7 @@ public class MainActivity extends Activity {
                         render();
                     }
                 };
-                if (needsGoalBalanceConfirmation(selectedAccount, goal.currentAmount, goal.id)) {
-                    showBalanceConfirmation("Confirm goal money",
-                            goalBalanceWarning(selectedAccount, goal.currentAmount, goal.id), TEAL, save);
+                if (denyGoalIfUnavailable(selectedAccount, goal.currentAmount, goal.id)) {
                     return false;
                 }
                 save.run();
@@ -2131,6 +2412,17 @@ public class MainActivity extends Activity {
         if (account == null || account.id == 0 || goalAmount <= 0) return false;
         double otherReserved = db.goalReservedForAccountExcept(account.id, excludingGoalId);
         return otherReserved + goalAmount > account.balance;
+    }
+
+    private boolean denyGoalIfUnavailable(Account account, double goalAmount, long excludingGoalId) {
+        if (!needsGoalBalanceConfirmation(account, goalAmount, excludingGoalId)) return false;
+        double available = account.balance - db.goalReservedForAccountExcept(account.id, excludingGoalId);
+        LinearLayout form = form();
+        addDialogHero(form, "!", "Balance is low", "Available: " + money(available, account.currency)
+                + ". Want to set aside: " + money(goalAmount, account.currency)
+                + ". Reduce the goal amount or choose another account.", CORAL);
+        showStyledDialog(form, null, "OK", CORAL, null, null);
+        return true;
     }
 
     private String goalBalanceWarning(Account account, double goalAmount, long excludingGoalId) {
@@ -2146,9 +2438,7 @@ public class MainActivity extends Activity {
     }
 
     private String investmentBalanceWarning(Account account, double amount) {
-        return "This will deduct " + money(amount, account.currency) + " from " + account.name
-                + ". After goal reservations, available balance is " + money(availableForInvestment(account), account.currency)
-                + ". Confirm if you still want to continue.";
+        return outflowWarning(account, amount);
     }
 
     private String investmentNotes(String notes, CheckBox recurring, Spinner frequency) {
@@ -2159,6 +2449,27 @@ public class MainActivity extends Activity {
 
     private double availableForInvestment(Account account) {
         return account.balance - db.goalReservedForAccount(account.id);
+    }
+
+    private boolean needsOutflowConfirmation(Account account, double amount) {
+        if (account == null || account.id == 0 || amount <= 0) return false;
+        return amount > availableForInvestment(account) || amount > account.balance;
+    }
+
+    private String outflowWarning(Account account, double amount) {
+        double reserved = db.goalReservedForAccount(account.id);
+        double available = account.balance - reserved;
+        double after = account.balance - amount;
+        if (after < 0) {
+            return "This will make " + account.name + " negative. Balance after: " + money(after, account.currency) + ". Confirm?";
+        }
+        return "This will use money set aside for goals. Available: " + money(available, account.currency)
+                + ". Amount: " + money(amount, account.currency) + ". Confirm?";
+    }
+
+    private boolean sourceEntryEditable(Entry entry) {
+        String source = safeText(entry.sourceType);
+        return source.length() == 0 || SOURCE_INVESTMENT_MATURITY.equals(source);
     }
 
     private void showBalanceConfirmation(String title, String message, int accent, final Runnable action) {
@@ -2183,26 +2494,27 @@ public class MainActivity extends Activity {
             toast("Add at least two currency accounts before recording transfers.");
             return;
         }
+        final Transfer preset = existing == null ? db.latestTransfer() : existing;
         LinearLayout form = form();
         final Spinner fromCountry = spinner(countryNames(countries));
         final Spinner toCountry = spinner(countryNames(countries));
-        if (existing != null) {
-            fromCountry.setSelection(countryIndex(countries, existing.fromCountryId));
-            toCountry.setSelection(countryIndex(countries, existing.toCountryId));
+        if (preset != null) {
+            fromCountry.setSelection(countryIndex(countries, preset.fromCountryId));
+            toCountry.setSelection(countryIndex(countries, preset.toCountryId));
         } else if (countries.size() > 1) {
             toCountry.setSelection(1);
         }
         final Spinner fromAccount = spinner(accountNames(db.accounts(countries.get(fromCountry.getSelectedItemPosition()).id)));
         final Spinner toAccount = spinner(accountNames(db.accounts(countries.get(toCountry.getSelectedItemPosition()).id)));
-        if (existing != null) {
-            setAccountSelection(fromAccount, db.accounts(existing.fromCountryId), existing.fromAccountId);
-            setAccountSelection(toAccount, db.accounts(existing.toCountryId), existing.toAccountId);
+        if (preset != null) {
+            setAccountSelection(fromAccount, db.accounts(preset.fromCountryId), preset.fromAccountId);
+            setAccountSelection(toAccount, db.accounts(preset.toCountryId), preset.toAccountId);
         }
         final EditText date = dateInput("Transfer date", existing == null ? today() : existing.date, false);
-        final EditText amount = input("Transfer amount", existing == null ? "" : moneyPlain(existing.fromAmount), decimalInput());
-        final EditText fee = input("Transfer fee", existing == null ? "0" : moneyPlain(existing.feeAmount), decimalInput());
+        final EditText amount = input("Transfer amount", preset == null ? "" : moneyPlain(preset.fromAmount), decimalInput());
+        final EditText fee = input("Transfer fee", preset == null ? "0" : moneyPlain(preset.feeAmount), decimalInput());
         final RadioGroup feeMode = feeModeRadioGroup();
-        final EditText rate = input("Conversion rate", existing == null ? "" : oneFour(existing.rate), decimalInput());
+        final EditText rate = input("Conversion rate", preset == null ? "" : oneFour(preset.rate), decimalInput());
         final TextView converted = text("Converted amount will appear here.", 13, Typeface.BOLD, TEAL);
         final EditText notes = multiInput("Notes");
         if (existing != null) notes.setText(existing.notes);
@@ -2224,16 +2536,16 @@ public class MainActivity extends Activity {
         fromCountry.setOnItemSelectedListener(countryListener);
         toCountry.setOnItemSelectedListener(countryListener);
         initializingTransfer[0] = false;
-        if (existing != null) {
+        if (preset != null) {
             fromCountry.post(new Runnable() {
                 @Override
                 public void run() {
-                    resetSpinner(fromAccount, accountNames(db.accounts(existing.fromCountryId)));
-                    resetSpinner(toAccount, accountNames(db.accounts(existing.toCountryId)));
-                    setAccountSelection(fromAccount, db.accounts(existing.fromCountryId), existing.fromAccountId);
-                    setAccountSelection(toAccount, db.accounts(existing.toCountryId), existing.toAccountId);
-                    rate.setText(oneFour(existing.rate));
-                    updateConverted(rate, amount, fee, feeMode, converted, existing.fromCurrency, existing.toCurrency);
+                    resetSpinner(fromAccount, accountNames(db.accounts(preset.fromCountryId)));
+                    resetSpinner(toAccount, accountNames(db.accounts(preset.toCountryId)));
+                    setAccountSelection(fromAccount, db.accounts(preset.fromCountryId), preset.fromAccountId);
+                    setAccountSelection(toAccount, db.accounts(preset.toCountryId), preset.toAccountId);
+                    rate.setText(oneFour(preset.rate));
+                    updateConverted(rate, amount, fee, feeMode, converted, preset.fromCurrency, preset.toCurrency);
                 }
             });
         }
@@ -2269,7 +2581,7 @@ public class MainActivity extends Activity {
                         countries.get(toCountry.getSelectedItemPosition()).currency);
             }
         });
-        if (existing == null) applyDailyRate(countries, fromCountry, toCountry, date, rate, amount, fee, feeMode, converted);
+        if (existing == null && preset == null) applyDailyRate(countries, fromCountry, toCountry, date, rate, amount, fee, feeMode, converted);
         else updateConverted(rate, amount, fee, feeMode, converted,
                 countries.get(fromCountry.getSelectedItemPosition()).currency,
                 countries.get(toCountry.getSelectedItemPosition()).currency);
@@ -2295,7 +2607,8 @@ public class MainActivity extends Activity {
         form.addView(converted);
         form.addView(notes);
 
-        showStyledDialog(form, "Cancel", "Save", SKY, null, new DialogSubmit() {
+        final AlertDialog[] dialogHolder = new AlertDialog[1];
+        dialogHolder[0] = showStyledDialog(form, "Cancel", "Save", SKY, null, new DialogSubmit() {
             @Override
             public boolean submit() {
                 Country from = countries.get(fromCountry.getSelectedItemPosition());
@@ -2322,18 +2635,44 @@ public class MainActivity extends Activity {
                 Account source = fromAccounts.get(Math.min(fromAccount.getSelectedItemPosition(), fromAccounts.size() - 1));
                 Account destination = toAccounts.get(Math.min(toAccount.getSelectedItemPosition(), toAccounts.size() - 1));
                 double destinationAmount = transferAmount * rateValue;
-                if (existing == null) {
-                    db.addTransfer(clean(date.getText().toString(), today()), from.id, to.id,
-                            source.id, destination.id, transferAmount, destinationAmount, rateValue, feeValue,
-                            db.rateSource(from.currency, to.currency, clean(date.getText().toString(), today())),
-                            notes.getText().toString().trim());
-                } else {
-                    db.updateTransfer(existing.id, clean(date.getText().toString(), today()), from.id, to.id,
-                            source.id, destination.id, transferAmount, destinationAmount, rateValue, feeValue,
-                            db.rateSource(from.currency, to.currency, clean(date.getText().toString(), today())),
-                            notes.getText().toString().trim());
+                final double debitAmount = transferAmount + Math.max(0, feeValue);
+                final Account riskAccount = db.account(source.id);
+                if (existing != null && existing.fromAccountId == source.id) {
+                    riskAccount.balance += existing.fromAmount + Math.max(0, existing.feeAmount);
                 }
-                render();
+                final String finalDate = clean(date.getText().toString(), today());
+                final Country finalFrom = from;
+                final Country finalTo = to;
+                final Account finalSource = source;
+                final Account finalDestination = destination;
+                final double finalTransferAmount = transferAmount;
+                final double finalDestinationAmount = destinationAmount;
+                final double finalRateValue = rateValue;
+                final double finalFeeValue = feeValue;
+                final String finalNotes = notes.getText().toString().trim();
+                final Runnable save = new Runnable() {
+                    @Override
+                    public void run() {
+                        if (existing == null) {
+                            db.addTransfer(finalDate, finalFrom.id, finalTo.id,
+                                    finalSource.id, finalDestination.id, finalTransferAmount, finalDestinationAmount, finalRateValue, finalFeeValue,
+                                    db.rateSource(finalFrom.currency, finalTo.currency, finalDate),
+                                    finalNotes);
+                        } else {
+                            db.updateTransfer(existing.id, finalDate, finalFrom.id, finalTo.id,
+                                    finalSource.id, finalDestination.id, finalTransferAmount, finalDestinationAmount, finalRateValue, finalFeeValue,
+                                    db.rateSource(finalFrom.currency, finalTo.currency, finalDate),
+                                    finalNotes);
+                        }
+                        if (dialogHolder[0] != null) dialogHolder[0].dismiss();
+                        render();
+                    }
+                };
+                if (needsOutflowConfirmation(riskAccount, debitAmount)) {
+                    showBalanceConfirmation("Confirm transfer", outflowWarning(riskAccount, debitAmount), SKY, save);
+                    return false;
+                }
+                save.run();
                 return true;
             }
         });
@@ -2559,9 +2898,13 @@ public class MainActivity extends Activity {
     }
 
     private void showCategoryDialog(final Category existing) {
+        showCategoryDialog(existing, existing == null ? "Expense" : existing.type);
+    }
+
+    private void showCategoryDialog(final Category existing, String initialType) {
         LinearLayout form = form();
         final Spinner type = spinner(new String[]{"Expense", "Income"});
-        if (existing != null) setSpinnerToValue(type, existing.type);
+        setSpinnerToValue(type, initialType);
         final Spinner icon = spinner(categoryIconOptions());
         final EditText customIcon = input("Your icon", "", InputType.TYPE_CLASS_TEXT);
         customIcon.setVisibility(View.GONE);
@@ -2623,41 +2966,22 @@ public class MainActivity extends Activity {
 
     private void showCountryDialog(final Country existing) {
         LinearLayout form = form();
-        final EditText countryName = input("Currency account name", existing == null ? "" : existing.name, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        final EditText countryName = input("Name of Account", existing == null ? "" : existing.name, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
         final Spinner currency = spinner(currencyLabels());
         setSpinnerToPrefix(currency, existing == null ? "USD" : existing.currency);
         final int accent = existing == null ? BLUE : currencyColor(existing);
         addDialogHero(form, currencySymbol(existing == null ? "USD" : existing.currency),
-                existing == null ? "Add currency account" : "Edit currency account",
+                existing == null ? "Add account" : "Edit account",
                 "Name the account and choose the currency it tracks.", accent);
-        form.addView(dialogSection("Currency account", countryName, currency));
+        form.addView(dialogSection("Account", countryName, currency));
         final AlertDialog[] dialogHolder = new AlertDialog[1];
-        if (existing != null) {
-            Button delete = outlineButton("Delete currency account");
-            delete.setTextColor(CORAL);
-            delete.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View view) {
-                    if (!db.canDeleteCountry(existing.id)) {
-                        toast("This currency account has activity and cannot be deleted.");
-                        return;
-                    }
-                    db.deleteCountry(existing.id);
-                    selectedCountryId = db.firstCountryId();
-                    selectedAccountIds.clear();
-                    if (dialogHolder[0] != null) dialogHolder[0].dismiss();
-                    render();
-                }
-            });
-            form.addView(delete, matchWrapWithMargins(0, dp(4), 0, 0));
-        }
 
         dialogHolder[0] = showStyledDialog(form, "Cancel", existing == null ? "Add" : "Save", accent, null, new DialogSubmit() {
             @Override
             public boolean submit() {
                 String name = countryName.getText().toString().trim();
                 if (name.length() == 0) {
-                    toast("Enter a currency account name.");
+                    toast("Enter an account name.");
                     return false;
                 }
                 if (existing == null) {
@@ -3205,7 +3529,7 @@ public class MainActivity extends Activity {
             });
             icons.addView(bill, smallActionParams());
         }
-        if (entry.id > 0 && safeText(entry.sourceType).length() == 0) {
+        if (entry.id > 0 && sourceEntryEditable(entry)) {
             Button edit = tinyIconButton("✎", BLUE);
             edit.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -4418,9 +4742,7 @@ public class MainActivity extends Activity {
     }
 
     private String recurringDueCutoffDate() {
-        Calendar calendar = Calendar.getInstance();
-        if (calendar.get(Calendar.HOUR_OF_DAY) < 20) calendar.add(Calendar.DAY_OF_MONTH, -1);
-        return new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(calendar.getTime());
+        return today();
     }
 
     private String recurringOccurrenceDate(Entry entry, int occurrence) {
@@ -4704,6 +5026,57 @@ public class MainActivity extends Activity {
         return index > 0 ? value.substring(0, index) : value;
     }
 
+    private AutoCompleteTextView currencySearchInput(String currencyCode) {
+        AutoCompleteTextView edit = new AutoCompleteTextView(this);
+        edit.setHint("Search currency, e.g. INR");
+        edit.setSingleLine(true);
+        edit.setTextColor(INK);
+        edit.setHintTextColor(Color.rgb(126, 136, 145));
+        edit.setTextSize(15);
+        edit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
+        edit.setTypeface(friendlyTypeface(Typeface.NORMAL));
+        edit.setMinHeight(dp(56));
+        edit.setPadding(dp(14), 0, dp(14), 0);
+        edit.setBackground(round(Color.rgb(248, 250, 253), dp(16), Color.rgb(214, 225, 240)));
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this,
+                android.R.layout.simple_dropdown_item_1line, currencyLabels());
+        edit.setAdapter(adapter);
+        edit.setThreshold(1);
+        setCurrencySearchText(edit, currencyCode);
+        return edit;
+    }
+
+    private void setCurrencySearchText(AutoCompleteTextView edit, String currencyCode) {
+        String[] labels = currencyLabels();
+        for (String label : labels) {
+            if (label.startsWith(currencyCode + " ")) {
+                edit.setText(label, false);
+                return;
+            }
+        }
+        edit.setText(currencyCode, false);
+    }
+
+    private String selectedCurrencyCode(AutoCompleteTextView edit) {
+        String value = edit.getText().toString().trim().toUpperCase(Locale.US);
+        if (value.length() >= 3) {
+            String code = value.substring(0, 3);
+            try {
+                Currency.getInstance(code);
+                return code;
+            } catch (Exception ignored) {
+            }
+        }
+        String compact = value.replace(" ", "");
+        for (String label : currencyLabels()) {
+            String upper = label.toUpperCase(Locale.US);
+            if (upper.startsWith(value) || upper.contains(value) || upper.replace(" ", "").contains(compact)) {
+                return label.substring(0, 3);
+            }
+        }
+        return "USD";
+    }
+
     private void setSpinnerToPrefix(Spinner spinner, String prefix) {
         for (int i = 0; i < spinner.getCount(); i++) {
             String item = spinner.getItemAtPosition(i).toString();
@@ -4842,6 +5215,7 @@ public class MainActivity extends Activity {
         Entry template;
         String date;
         int occurrence;
+        boolean approvable;
     }
 
     private static class Investment {
@@ -4859,6 +5233,19 @@ public class MainActivity extends Activity {
         String maturityAction;
         String status;
         String notes;
+    }
+
+    private static class InvestmentDraft {
+        String type = "Fixed Deposit";
+        String title = "";
+        long accountId;
+        double principal;
+        String startDate = "";
+        String maturityDate = "";
+        double maturityValue;
+        String maturityAction = "";
+        String notes = "";
+        boolean reinvested;
     }
 
     private static class EntryTemplate {
@@ -5260,6 +5647,8 @@ public class MainActivity extends Activity {
             addDefaultCategory(db, "Investments", "📈", "Expense");
             addDefaultCategory(db, "Transfers", "⇄", "Income");
             addDefaultCategory(db, "Transfers", "⇄", "Expense");
+            addDefaultCategory(db, "Balance Adjustment", "≋", "Income");
+            addDefaultCategory(db, "Balance Adjustment", "≋", "Expense");
         }
 
         private void addDefaultCategory(SQLiteDatabase db, String name, String icon, String type) {
@@ -5431,12 +5820,38 @@ public class MainActivity extends Activity {
         }
 
         void updateAccount(long accountId, String name, String type, double balance, String currency) {
+            SQLiteDatabase db = getWritableDatabase();
+            long countryId = 0;
+            double oldBalance = 0;
+            Cursor cursor = db.rawQuery("SELECT country_id, balance FROM accounts WHERE id = ?", new String[]{String.valueOf(accountId)});
+            try {
+                if (cursor.moveToFirst()) {
+                    countryId = cursor.getLong(0);
+                    oldBalance = cursor.getDouble(1);
+                }
+            } finally {
+                cursor.close();
+            }
             ContentValues values = new ContentValues();
             values.put("name", name);
             values.put("type", type);
             values.put("balance", balance);
             values.put("currency", currency);
-            getWritableDatabase().update("accounts", values, "id = ?", new String[]{String.valueOf(accountId)});
+            db.beginTransaction();
+            try {
+                db.update("accounts", values, "id = ?", new String[]{String.valueOf(accountId)});
+                double difference = balance - oldBalance;
+                if (countryId > 0 && Math.abs(difference) > 0.0001) {
+                    insertEntry(db, countryId, difference >= 0 ? "Income" : "Expense",
+                            new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date()),
+                            "Balance adjustment", Math.abs(difference), "Balance Adjustment", "",
+                            accountId, "Auto-added from account balance edit", "",
+                            false, 0, "", 0, "", 0, SOURCE_BALANCE_ADJUSTMENT, accountId, false);
+                }
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
         }
 
         List<Account> accounts(long countryId) {
@@ -5771,11 +6186,10 @@ public class MainActivity extends Activity {
 
         boolean recurringOccurrenceExists(long countryId, Entry template, String date) {
             String sql = "SELECT id FROM entries WHERE country_id = ? AND type = ? AND date = ? " +
-                    "AND title = ? AND ABS(amount - ?) < 0.0001 AND category = ? AND account_id = ? " +
-                    "AND id != ? LIMIT 1";
+                    "AND account_id = ? AND id != ? AND repeat_interval = 0 " +
+                    "AND (source_type IS NULL OR source_type = '') LIMIT 1";
             Cursor cursor = getReadableDatabase().rawQuery(sql, new String[]{
-                    String.valueOf(countryId), safe(template.type), date, safe(template.title),
-                    String.valueOf(template.amount), safe(template.category),
+                    String.valueOf(countryId), safe(template.type), date,
                     String.valueOf(template.accountId), String.valueOf(template.id)
             });
             try {
@@ -5967,9 +6381,22 @@ public class MainActivity extends Activity {
         void addInvestment(long countryId, String type, String title, long accountId, double principal,
                            double presentValue, double maturityValue, String startDate, String maturityDate,
                            String maturityAction, String notes) {
+            addInvestment(countryId, type, title, accountId, principal, presentValue, maturityValue,
+                    startDate, maturityDate, maturityAction, notes, true);
+        }
+
+        void addInvestment(long countryId, String type, String title, long accountId, double principal,
+                           double presentValue, double maturityValue, String startDate, String maturityDate,
+                           String maturityAction, String notes, boolean affectsAccount) {
             SQLiteDatabase db = getWritableDatabase();
             db.beginTransaction();
             try {
+                String storedNotes = notes == null ? "" : notes;
+                if (!affectsAccount && !storedNotes.contains("Created from maturity reinvestment")) {
+                    storedNotes = storedNotes.length() == 0
+                            ? "Created from maturity reinvestment"
+                            : storedNotes + "\nCreated from maturity reinvestment";
+                }
                 ContentValues values = new ContentValues();
                 values.put("country_id", countryId);
                 values.put("type", type);
@@ -5983,12 +6410,12 @@ public class MainActivity extends Activity {
                 values.put("maturity_value", maturityValue);
                 values.put("maturity_action", maturityAction);
                 values.put("status", "Active");
-                values.put("notes", notes);
+                values.put("notes", storedNotes);
                 values.put("created_at", now());
                 long investmentId = db.insert("investments", null, values);
                 insertEntry(db, countryId, "Expense", startDate, title + " opened", principal,
                         "Investments", "", accountId, "Auto-added from investment opening", "",
-                        false, 0, "", 0, "", 0, SOURCE_INVESTMENT_OPEN, investmentId, true);
+                        false, 0, "", 0, "", 0, SOURCE_INVESTMENT_OPEN, investmentId, affectsAccount);
                 db.setTransactionSuccessful();
             } finally {
                 db.endTransaction();
@@ -6146,7 +6573,7 @@ public class MainActivity extends Activity {
             db.beginTransaction();
             try {
                 double reversedOutflow = deleteSourceEntries(db, investment.id);
-                if (!"Created from maturity reinvestment".equals(investment.notes) && reversedOutflow < investment.principal) {
+                if (!safe(investment.notes).contains("Created from maturity reinvestment") && reversedOutflow < investment.principal) {
                     adjustAccount(db, investment.accountId, investment.principal - reversedOutflow);
                 }
                 db.delete("investments", "id = ?", new String[]{String.valueOf(investment.id)});
@@ -6185,24 +6612,81 @@ public class MainActivity extends Activity {
             return reversedOutflow;
         }
 
+        void processEarlyInvestmentClose(Investment investment, String date, double returnedAmount) {
+            SQLiteDatabase db = getWritableDatabase();
+            db.beginTransaction();
+            try {
+                long countryId = investmentCountryId(db, investment.id);
+                insertEntry(db, countryId, "Income", date,
+                        investment.title + " closure return", returnedAmount,
+                        "Investments", "", investment.accountId,
+                        "Auto-added from investment closure", "", false, 0, "", 0, "", 0,
+                        SOURCE_INVESTMENT_MATURITY, investment.id, true);
+                ContentValues values = new ContentValues();
+                values.put("current_value", returnedAmount);
+                values.put("maturity_value", returnedAmount);
+                values.put("maturity_action", "Closed before maturity");
+                values.put("status", "Matured");
+                db.update("investments", values, "id = ?", new String[]{String.valueOf(investment.id)});
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+        }
+
+        void processMaturityForReinvestmentChoice(Investment investment, String date, double maturityValue,
+                                                  String action, double returnedAmount) {
+            SQLiteDatabase db = getWritableDatabase();
+            db.beginTransaction();
+            try {
+                long countryId = investmentCountryId(db, investment.id);
+                if (returnedAmount > 0) {
+                    insertEntry(db, countryId, "Income", date,
+                            investment.title + " maturity interest", returnedAmount,
+                            "Interest", "", investment.accountId,
+                            "Auto-added from investment maturity interest", "", false, 0, "", 0, "", 0,
+                            SOURCE_INVESTMENT_MATURITY, investment.id, true);
+                }
+                ContentValues values = new ContentValues();
+                values.put("current_value", maturityValue);
+                values.put("maturity_value", maturityValue);
+                values.put("maturity_action", action);
+                values.put("status", "Matured");
+                db.update("investments", values, "id = ?", new String[]{String.valueOf(investment.id)});
+                db.setTransactionSuccessful();
+            } finally {
+                db.endTransaction();
+            }
+        }
+
         void processMaturity(Investment investment, String date, double maturityValue, String action) {
             SQLiteDatabase db = getWritableDatabase();
             db.beginTransaction();
             try {
+                long countryId = investmentCountryId(db, investment.id);
                 double interest = Math.max(0, maturityValue - investment.principal);
                 if ("Return full maturity amount to linked account".equals(action)) {
-                    adjustAccount(db, investment.accountId, maturityValue);
+                    insertEntry(db, countryId, "Income", date,
+                            investment.title + " maturity principal", Math.min(investment.principal, maturityValue),
+                            "Investments", "", investment.accountId,
+                            "Auto-added from investment maturity principal", "", false, 0, "", 0, "", 0,
+                            SOURCE_INVESTMENT_MATURITY, investment.id, true);
+                    if (interest > 0) {
+                        insertEntry(db, countryId, "Income", date,
+                                investment.title + " maturity interest", interest, "Interest", "", investment.accountId,
+                                "Auto-added from investment maturity interest", "", false, 0, "", 0, "", 0,
+                                SOURCE_INVESTMENT_MATURITY, investment.id, true);
+                    }
                 } else if ("Reinvest principal only".equals(action)) {
-                    adjustAccount(db, investment.accountId, interest);
+                    if (interest > 0) {
+                        insertEntry(db, countryId, "Income", date,
+                                investment.title + " maturity interest", interest, "Interest", "", investment.accountId,
+                                "Auto-added from investment maturity interest", "", false, 0, "", 0, "", 0,
+                                SOURCE_INVESTMENT_MATURITY, investment.id, true);
+                    }
                     createReinvestment(db, investment, investment.principal, date, action);
                 } else {
                     createReinvestment(db, investment, maturityValue, date, action);
-                }
-                if (interest > 0) {
-                    insertEntry(db, investmentCountryId(db, investment.id), "Income", date,
-                            investment.title + " maturity interest", interest, "Interest", "", investment.accountId,
-                            "Auto-added from investment maturity", "", false, 0, "", 0, "", 0,
-                            SOURCE_INVESTMENT_MATURITY, investment.id, false);
                 }
                 ContentValues values = new ContentValues();
                 values.put("current_value", maturityValue);
@@ -6220,9 +6704,16 @@ public class MainActivity extends Activity {
             SQLiteDatabase db = getWritableDatabase();
             db.beginTransaction();
             try {
-                insertEntry(db, countryId, "Income", date, investment.title + " redemption", maturityValue,
+                double principal = Math.min(investment.principal, maturityValue);
+                double gain = Math.max(0, maturityValue - investment.principal);
+                insertEntry(db, countryId, "Income", date, investment.title + " redemption principal", principal,
                         "Investments", "", accountId, "Auto-added from market fund redemption", "",
                         false, 0, "", 0, "", 0, SOURCE_INVESTMENT_MATURITY, investment.id, true);
+                if (gain > 0) {
+                    insertEntry(db, countryId, "Income", date, investment.title + " redemption gains", gain,
+                            "Investments", "", accountId, "Auto-added from market fund redemption", "",
+                            false, 0, "", 0, "", 0, SOURCE_INVESTMENT_MATURITY, investment.id, true);
+                }
                 ContentValues values = new ContentValues();
                 values.put("account_id", accountId);
                 values.put("current_value", maturityValue);
@@ -6596,6 +7087,11 @@ public class MainActivity extends Activity {
             return result;
         }
 
+        Transfer latestTransfer() {
+            List<Transfer> result = transfers();
+            return result.isEmpty() ? null : result.get(0);
+        }
+
         String entryReport(long countryId, String type, String start, String end, String categories, boolean taxOnly, String currency) {
             List<String> args = new ArrayList<String>();
             String sql = "SELECT category, title, date, amount, tax_amount FROM entries WHERE country_id = ? AND date >= ? AND date <= ?";
@@ -6715,6 +7211,23 @@ public class MainActivity extends Activity {
                 cursor.close();
             }
             return builder.length() == 0 ? "No accounts" : builder.toString();
+        }
+
+        String otherCountriesAvailableSummary(long countryId) {
+            StringBuilder builder = new StringBuilder();
+            Cursor cursor = getReadableDatabase().rawQuery(
+                    "SELECT a.currency, SUM(a.balance - COALESCE((SELECT SUM(g.current_amount) FROM goals g WHERE g.account_id = a.id), 0)) " +
+                            "FROM accounts a WHERE a.country_id != ? GROUP BY a.currency ORDER BY a.currency",
+                    new String[]{String.valueOf(countryId)});
+            try {
+                while (cursor.moveToNext()) {
+                    if (builder.length() > 0) builder.append(" · ");
+                    builder.append(money(cursor.getDouble(1), cursor.getString(0)));
+                }
+            } finally {
+                cursor.close();
+            }
+            return builder.toString();
         }
 
         boolean accountHasActivity(long accountId) {
